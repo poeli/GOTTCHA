@@ -78,9 +78,7 @@ You can use "git" to obtain the package:
         $ git clone https://github.com/LANL-Bioinformatics/GOTTCHA.git gottcha
 
 or download the compressed archive in
- [zip](https://github.com/LANL-Bioinformatics/GOTTCHA/archive/master.zip),
- [gz](https://bitbucket.org/poeli/gottcha/get/master.tar.gz) or 
- [bz2](https://bitbucket.org/poeli/gottcha/get/master.tar.bz2).
+ [zip](https://github.com/LANL-Bioinformatics/GOTTCHA/archive/master.zip).
 
 -------------------------------------------------------------------
 ### Installation
