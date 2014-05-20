@@ -29,7 +29,7 @@ in the "test" directory. More details are stated in the INSTRUCTION section.
 
 1. Obtaining GOTTCHA package:
 
-        $ git clone https://bitbucket.org/poeli/gottcha gottcha
+        $ git clone https://github.com/LANL-Bioinformatics/GOTTCHA.git gottcha
 
 2. Installing GOTTCHA:
 
@@ -75,7 +75,7 @@ Please see [Obtain Pre-computed Database] section for more information.
        
 You can use "git" to obtain the package:
 
-        $ git clone https://bitbucket.org/poeli/gottcha
+        $ git clone https://github.com/LANL-Bioinformatics/GOTTCHA.git gottcha
 
 or download the compressed archive in
  [zip](https://bitbucket.org/poeli/gottcha/get/master.zip),
@@ -167,7 +167,7 @@ as input and specify the location and name of the database.
 
 Here is the general usage to run GOTTCHA:
 
- > $ bin/gottcha.pl -i <FASTQ> -d <PATH/DATABASE_PREFIX>
+ > $ bin/gottcha.pl -i &lt;FASTQ &gt; -d  &lt;PATH/DATABASE_PREFIX &gt;
 
 We provided a testing FASTQ file and example output in ./test. The following command
 is an example to run "test.fastq" through GOTTCHA using a species level database with
