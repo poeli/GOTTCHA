@@ -67,18 +67,18 @@ If you are looking for instructions building a CUSTOM database and/or running GO
 step-by-step, please read README_FULL.md.
 
 -------------------------------------------------------------------
-### Obtain GOTTCHA
+### Obtaining GOTTCHA
 
 The source codes can be downloading from [here](https://bitbucket.org/poeli/gottcha).
 The pre-computed databases need to be downloaded separately from our SFTP server.
-Please see [Obtain Pre-computed Database] section for more information.
+Please see below in the [Obtaining Pre-computed Databases] section.
        
 You can use "git" to obtain the package:
 
         $ git clone https://github.com/LANL-Bioinformatics/GOTTCHA.git gottcha
 
 or download the compressed archive in
- [zip](https://bitbucket.org/poeli/gottcha/get/master.zip),
+ [zip](https://github.com/LANL-Bioinformatics/GOTTCHA/archive/master.zip),
  [gz](https://bitbucket.org/poeli/gottcha/get/master.tar.gz) or 
  [bz2](https://bitbucket.org/poeli/gottcha/get/master.tar.bz2).
 
@@ -99,7 +99,7 @@ After running INSTALL.sh successfully, the binaries and related scripts will be 
 in ./bin directory.
 
 -------------------------------------------------------------------
-### Obtain Pre-computed Database
+### Obtaining Pre-computed Databases
 
 Databases of unique genome segments at multiple taxonomic levels (e.g. family, species, 
 genus, strain-level, etc.) are used for taxonomic classification of reads. Variants of 
@@ -125,7 +125,7 @@ database (e.g: GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz) to classi
 These signature databases could be huge. We highly recommend users also download 
 corresponding *.md5 file for verification.
 
-You can use 'sftp' command to download both archives once at a time:
+You can use the 'sftp' command to download both archives, one at a time:
 
         $ sftp -o "Port 33001" gottcha@img-gp.lanl.gov:/data/gottcha/GOTTCHA_lookup.tar.gz ./
         $ sftp -o "Port 33001" gottcha@img-gp.lanl.gov:/data/gottcha/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz ./
@@ -158,7 +158,7 @@ also available in FASTA format at /data/gottcha/FASTA/:
   * GOTTCHA_VIRUSES_c3498_k85_u24_xHUMAN3x.strain.tar.gz (68MB)
 
 -------------------------------------------------------------------
-### Run GOTTCHA
+### Running GOTTCHA
 
 The procedure includes 3 major steps: split-trimming the input data, mapping reads 
 to a GOTTCHA database using BWA and profiling/filtering the result. These steps have
@@ -167,7 +167,7 @@ as input and specify the location and name of the database.
 
 Here is the general usage to run GOTTCHA:
 
- > $ bin/gottcha.pl -i &lt;FASTQ &gt; -d  &lt;PATH/DATABASE_PREFIX &gt;
+ > $ bin/gottcha.pl -i <FASTQ> -d <PATH/DATABASE_PREFIX>
 
 We provided a testing FASTQ file and example output in ./test. The following command
 is an example to run "test.fastq" through GOTTCHA using a species level database with
@@ -227,7 +227,7 @@ Use 'ktImportText' and save the chart to "test.krona.html":
 ------------------------------------------------------------------
 ## CITATION
 
-Tracey Allen K. Freitas, Po-E Li, Matthew B. Scholz, Patrick S. G. Chain: Metagenome 
+Tracey Allen K. Freitas, Po-E Li, Matthew B. Scholz, Patrick S. G. Chain: Accurate Metagenome 
 characterization using a hierarchical suite of unique signatures. (in submission)
 
 -------------------------------------------------------------------
