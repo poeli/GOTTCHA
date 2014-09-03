@@ -606,6 +606,7 @@ sub exportUpdatedTable {
     my @sortedHeaderIndices = sort {$a <=> $b} keys %{ $_[0] };
     print $OUTFILE join("\t", map { $_[0]->{$_}->{NAME} } @sortedHeaderIndices)."\n";
     my @sortedEntryIndices = sort { $a <=> $b } keys %{ $_[0]->{0}->{VAL} };
+    my $taxa_cnt=0;
 
     foreach my $entryIdx (@sortedEntryIndices) {
         foreach my $sortedHeaderIdx (0..$#sortedHeaderIndices) {
@@ -617,11 +618,12 @@ sub exportUpdatedTable {
             }
         }
         print $OUTFILE "\n";
+	$taxa_cnt++;
     }
         
     close $OUTFILE;
     
-    print "done!\n";
+    print "done. ($taxa_cnt taxonomies)\n";
     
 }
 ################################################################################
@@ -2407,6 +2409,8 @@ sub parseSAM {
     my $mappedTrimmedReadsFilename   = $outdir."/".$prefix.".MAPPED.trimmed.fastq";
     my $unmappedTrimmedReadsFilename = $outdir."/".$prefix.".UNMAPPED.trimmed.fastq";
 
+    my $MAPPED_TRIMMEDREADS_CNT   = 0;
+    my $UNMAPPED_TRIMMEDREADS_CNT = 0; 
     my $MAPPED_TRIMMEDREADS   = q{};
     my $UNMAPPED_TRIMMEDREADS = q{};
     open $MAPPED_TRIMMEDREADS, '>', $mappedTrimmedReadsFilename unless ($noMappedFastq);
@@ -2465,6 +2469,7 @@ sub parseSAM {
             if($fields[1] & hex(0b100)) {
                 #if($writeUnmapped) { print $UNMAPPED_TRIMMEDREADS "@".$fields[0]."\n".$fields[9]."\n"."+\n".$fields[10]."\n"; }
                 print $UNMAPPED_TRIMMEDREADS "@".$fields[0]."\n".$fields[9]."\n"."+\n".$fields[10]."\n" unless ($noUnmappedFastq);
+                $UNMAPPED_TRIMMEDREADS_CNT++;
                 next LINE;
             }
 
@@ -2481,6 +2486,7 @@ sub parseSAM {
             ####################
             if($fields[5] =~ m/^(\d+)M$/) {
                 my $lengthMatch = $1;
+                $MAPPED_TRIMMEDREADS_CNT++;
 
                 # Mapping entry conforms
                 if($fields[2] =~ m/^(gi\|(\d+)\|\S+\|(\w+(?:\.\d+))\|(\d+)\|(\d+)\|)/) {
@@ -2568,12 +2574,12 @@ sub parseSAM {
         } #LINE
         close $SAMFILE unless $SAMFILE_is_STDIN;
         my $iter1 = new Benchmark;
-        print "done. ".timestr(timediff($iter1,$iter0))."\n";         # parsing SAM file
+        print "done. Mapped split-trimmed reads: $MAPPED_TRIMMEDREADS_CNT, Unmapped split-trimmed reads: $UNMAPPED_TRIMMEDREADS_CNT. ".timestr(timediff($iter1,$iter0))."\n";         # parsing SAM file
     } #@samFiles
 
     close $MAPPED_TRIMMEDREADS unless ($noMappedFastq);
     close $UNMAPPED_TRIMMEDREADS unless ($noUnmappedFastq);
-
+    
     return \%gi2mapFrags;
 }
 ################################################################################

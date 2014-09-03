@@ -101,7 +101,7 @@ my $MODE       = defined $opt{mode}    ? $opt{mode} : "summary";
 my $BWAMETHOD  = "mem";
 my $BWA_OPT    = defined $opt{bwaOpt}  ? $opt{bwaOpt} : "-k 30 -T 0 -B 100 -O 100 -E 100";
 #-------SPLITRIM OPTIONS-------
-my $STDIR      = defined $opt{stDir}   ? $opt{stDir}   : "$TMPDIR/splitrim";
+my $STDIR      = defined $opt{stDir}   ? $opt{stDir}   : "$OUTDIR/$TMPDIR/splitrim";
 my $TRIM_FIXL  = defined $opt{fixL}    ? $opt{fixL}    : 30;
 my $TRIM_MINQ  = defined $opt{minQ}    ? $opt{minQ}    : 20;
 my $TRIM_ASCII = defined $opt{ascii}   ? $opt{ascii}   : 33;
@@ -114,7 +114,7 @@ my $FIL_MINL   = defined $opt{minLen}  ? $opt{minLen}  : 100;
 my $FIL_MINH   = defined $opt{minHits} ? $opt{minHits} : 10;
 #-------DEBUG---------
 my $DEBUG_MODE = $opt{debug};
-my $LOGFILE    = "$PREFIX.gottcha.log";
+my $LOGFILE    = "$OUTDIR/$PREFIX.gottcha.log";
 
 my ($DBPATH) = $opt{database} =~ /^(.*)\/[^\/]+$/;
 $DBPATH ||= ".";
@@ -144,7 +144,7 @@ unless ( defined $db_level{$DBLVL} ){
 }
 
 #open (STDOUT, "| tee -a $LOGFILE");
-
+`mkdir -p $OUTDIR/$TMPDIR`;
 $ct = &timeInterval($time);
 &executeCommand("rm $LOGFILE | touch $LOGFILE", "[$ct] ERROR: Failed to create logfile: $LOGFILE."); 
 
@@ -179,12 +179,19 @@ else{
                     , "[$ct] Failed running splitrim. Please check $LOGFILE for detail.");
     $ct = &timeInterval($time);
     print "[$ct] Done splitrim.\n";
+    
+    #print splitrim summary
+    open STATS, "$STDIR/${PREFIX}_splitrim.stats.txt" or die "Can't open splitrim stats: $!\n";
+    my @lines = <STATS>;
+    print "\n",join "", @lines[3..8],"\n";
+    close STATS;
 }
 
-# run bwa
+# run bwa and profiling results
 $ct = &timeInterval($time);
 print "[$ct] Mapping split-trimmed reads to GOTTCHA database and profiling...\n";
 my $BWA_DEBUG = "| tee $OUTDIR/$TMPDIR/$PREFIX.sam" if $DEBUG_MODE;
+
 &executeCommand("bwa $BWAMETHOD $BWA_OPT -t $THREADS $DB $STDIR/${PREFIX}_splitrim.fastq $BWA_DEBUG \\
                  | profileGottcha.pl                                          \\
                      --parsedDB=$DB.parsedGOTTCHA.dmp                         \\
@@ -194,10 +201,35 @@ my $BWA_DEBUG = "| tee $OUTDIR/$TMPDIR/$PREFIX.sam" if $DEBUG_MODE;
                      --trimStats=$STDIR/${PREFIX}_splitrim.stats.txt          \\
                      --treeFile=$DBPATH/speciesTreeGI.dmp                     \\
                      --genomeVitals=$DBPATH/genomeVitals.dmp                  \\
-                     --noFastqOut --method=1"
+                     --noFastqOut --method=1 > $OUTDIR/$TMPDIR/profileGottcha.log 2>&1"
                 , "[$ct] ERROR: Failed running BWA or profileGottcha.pl. Please check $LOGFILE for detail.");
+&executeCommand("cat $OUTDIR/$TMPDIR/profileGottcha.log >> $LOGFILE");
+#print bwa and profiling summary
+my ($bwa_read,$bwa_processed,$bwa_mapped,$bwa_unmapped,$profile_taxa) = (0,0,0,0,0);
+open RUNNINGLOG, "$LOGFILE" or die "Can't open log file: $!\n";
+while(<RUNNINGLOG>){
+    ($bwa_mapped,$bwa_unmapped) = ($1,$2) if /Mapped split-trimmed reads: (\d+), Unmapped split-trimmed reads: (\d+)/;
+    $bwa_read+=$1 if /read (\d+) sequences/;
+    $bwa_processed+=$1 if /Processed (\d+) reads/;
+    $profile_taxa=$1 if /\.$DBLVL\.tsv\.ABU"\.\.\.done\. \((\d+) taxonomies\)/i;
+}
+close RUNNINGLOG;
+
 $ct = &timeInterval($time);
-print "[$ct] Done result profiling.\n";
+print "\n";
+print "                        SPLIT-TRIMMED\n";
+print "                        =============\n";
+print "# of Processed Reads:   $bwa_processed\n";
+print "   # of Mapped Reads:   $bwa_mapped\n";
+print " # of Unmapped Reads:   $bwa_unmapped\n";
+print "\n";
+print "[$ct] Done profiling mapping results. ($profile_taxa taxanomy(ies) found)\n";
+
+if( $bwa_mapped == 0){
+    $ct = &timeInterval($time);
+    print "[$ct] No read mapped to $DBLVL-level signatures. Please try again with upper-level databases.\n";
+    exit;
+}
 
 # run filterGottcha.pl
 $ct = &timeInterval($time);
@@ -220,10 +252,33 @@ print "[$ct] Filtering profiling results...\n";
                    --minMLHL=$FIL_MINM                        \\
                    --cCov=$FIL_CCOV                           \\
                    --minLen=$FIL_MINL                         \\
-                   --minHits=$FIL_MINH > $OUTDIR/$TMPDIR/$PREFIX.ABUX.out"
+                   --minHits=$FIL_MINH |tee $OUTDIR/$TMPDIR/$PREFIX.ABUX.out"
                 , "[$ct] ERROR: Failed running filterGottcha.pl. Please check $LOGFILE for detail. ");
+
+open ABUX, "$OUTDIR/$TMPDIR/$PREFIX.ABUX.out" or die "Can't open filterGottcha.pl output: $!\n";
+my $flag=0;
+my $filtered_tax_cnt=0;
+while(<ABUX>){
+    if(/^$DBLVL\t/i){
+        $flag=1; next;
+    }
+    elsif( $flag && !/^===/ ){
+	$filtered_tax_cnt++;
+    }
+    elsif( $flag && /^===/ ){
+        last;
+    }
+}
+close ABUX;
+
 $ct = &timeInterval($time);
-print "[$ct] Done filtering.\n";
+print "[$ct] Done filtering. ($filtered_tax_cnt taxanomy(ies) left)\n";
+
+if( $filtered_tax_cnt == 0){
+    $ct = &timeInterval($time);
+    print "[$ct] No taxanomy found in $DBLVL level. Please try again with upper-level databases.\n";
+    exit;
+}
 
 #mode
 $ct = &timeInterval($time);

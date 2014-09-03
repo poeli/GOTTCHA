@@ -13,7 +13,7 @@ superior performance compared with other available tools.
 Linux (2.6 kernel or later) or Mac (OSX 10.6 Snow Leopard or later) operating system
 with minimal 8 GB of RAM is recommended. Perl v5.8 or above is required. The C/C++
 compiling enviroment might be required for installing dependencies. Systems may vary.
-Please assure your system have essential software building package (e.g. build-essential
+Please assure that your system has the essential software building packages (e.g. build-essential
 for Ubuntu, XCODE for Mac...etc) installed properly before running the installing 
 script.
 
@@ -23,8 +23,8 @@ Ubuntu 10.04 w/ Perl v5.10.1) and Macbook Pro laptops (MAC OSX 10.8 w/ XCODE v5.
 -------------------------------------------------------------------
 ## QUICK START 
 
-This is an example for profiling "test.fastq" using GOTTCHA with a species-level
-pre-computed bacterial database. The testing FASTQ file comes along with GOTTCHA package
+This is an example of profiling a "test.fastq" file using GOTTCHA with a species-level
+pre-computed bacterial database. The testing FASTQ file comes along with the GOTTCHA package
 in the "test" directory. More details are stated in the INSTRUCTION section.
 
 1. Obtaining GOTTCHA package:
@@ -36,11 +36,13 @@ in the "test" directory. More details are stated in the INSTRUCTION section.
         $ cd gottcha
         $ ./INSTALL.sh
 
-3. Downloading lookup table and species level database from our SFTP server.
-   Using '9001gottcha' as password when the request prompts:
+3. Downloading lookup table and species-level database from our SFTP server.
+   Use '9001gottcha' as the password when the request prompts:
  
         $ sftp -o "Port 33001" gottcha@img-gp.lanl.gov:/data/gottcha/GOTTCHA_lookup.tar.gz ./
         $ sftp -o "Port 33001" gottcha@img-gp.lanl.gov:/data/gottcha/GOTTCHA_BACTERIA_c3514_k24_u24.species.tar.gz ./
+   
+   If you have any difficulty obtaining the databases, please contact Po-E Li <po-e@lanl.gov>.
 
 4. Unpacking and decompressing archives:
 
@@ -63,7 +65,7 @@ in the "test" directory. More details are stated in the INSTRUCTION section.
 The detail of steps in the above section will be descrbed in this section. Note that all 
 instructions in this document use pre-computed databases downloaded from our SFTP site.
 
-If you are looking for instructions building a CUSTOM database and/or running GOTTCHA
+If you are looking for instructions to build a CUSTOM database and/or running GOTTCHA
 step-by-step, please read README_FULL.md.
 
 -------------------------------------------------------------------
@@ -75,26 +77,28 @@ Please see below in the [Obtaining Pre-computed Databases] section.
        
 You can use "git" to obtain the package:
 
-        $ git clone https://github.com/LANL-Bioinformatics/GOTTCHA.git gottcha
+        $ git clone https://bitbucket.org/poeli/gottcha
 
 or download the compressed archive in
- [zip](https://github.com/LANL-Bioinformatics/GOTTCHA/archive/master.zip).
+ [zip](https://bitbucket.org/poeli/gottcha/get/master.zip),
+ [gz](https://bitbucket.org/poeli/gottcha/get/master.tar.gz) or 
+ [bz2](https://bitbucket.org/poeli/gottcha/get/master.tar.bz2).
 
 -------------------------------------------------------------------
 ### Installation
 
-The GOTTCHA profiling and database generating scripts are primarily Perl-based, and require at
+The GOTTCHA profiling and database-generating scripts are primarily Perl-based, and require at
 least Perl v5.8 with dependencies installed properly (listed in README_FULL.md).
 The splitrim tool is written in [D](http://www.dlang.org) that requires an appropriate D 
-compiler to complie it. GOTTCHA utilizes [BWA](https://github.com/lh3/bwa) with BWA-MEM algorithm
+compiler to complie it. GOTTCHA utilizes [BWA](https://github.com/lh3/bwa) with the BWA-MEM algorithm
 for read mapping. You can either keep "dmd" and "bwa" in your system path or simply 
-run the installing script - INSTALL.sh. This script will check and try to install missing 
+run the installation script - INSTALL.sh. This script will check and try to install missing 
 tools and dependencies:
 
     	$ ./INSTALL.sh
 
 After running INSTALL.sh successfully, the binaries and related scripts will be stored
-in ./bin directory.
+in the ./bin directory.
 
 -------------------------------------------------------------------
 ### Obtaining Pre-computed Databases
@@ -106,11 +110,11 @@ this study. These 24-mers were derived from the GRCh37.p10 (Genome Reference Con
 HuRef (J. Craig Venter Institute), and CHM1_1.0 (Washington U. School of Medicine) 
 assemblies and include unplaced scaffolds. For example, 
 GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz is a GOTTCHA bacterial 
-signature database that was produced by eliminating shared 24-mer (k24) sequences at 
-species level and 3 human genomes (xHuman3X) from 3514 bacterial contigs (c3514; replicons
-including chromosomes and plasmids) and retained minimum 24bp of unique fragments (u24).
+species-level signature database that was produced by eliminating shared 24-mer (k24) sequences from
+3514 bacterial replicons (c3514; includes both chromosomes and plasmids) and 3 human genomes (xHuman3X), 
+while retaining a minimum of 24bp of unique fragments (u24).
 
-The compressed database archives are available for users to download at our SFTP 
+The compressed database archives are available for users to download from our SFTP 
 server with the credential below:
  
  > SFTP server: img-gp.lanl.gov   
@@ -120,7 +124,7 @@ server with the credential below:
  
 GOTTCHA requires a taxanomic lookup table (GOTTCHA_lookup.tar.gz) and a pre-computed
 database (e.g: GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz) to classify reads.
-These signature databases could be huge. We highly recommend users also download 
+These signature databases could be huge. We highly recommend that users also download the
 corresponding *.md5 file for verification.
 
 You can use the 'sftp' command to download both archives, one at a time:
@@ -155,20 +159,23 @@ also available in FASTA format at /data/gottcha/FASTA/:
   * GOTTCHA_VIRUSES_c3498_k85_u24_xHUMAN3x.species.tar.gz (68MB)
   * GOTTCHA_VIRUSES_c3498_k85_u24_xHUMAN3x.strain.tar.gz (68MB)
 
+Note: We have noticed that our SFTP server doesn't work for some IPs.
+If you have any difficulty obtaining the databases, please contact Po-E Li <po-e@lanl.gov>.
+
 -------------------------------------------------------------------
 ### Running GOTTCHA
 
-The procedure includes 3 major steps: split-trimming the input data, mapping reads 
-to a GOTTCHA database using BWA and profiling/filtering the result. These steps have
-been wrapped into a sigle script 'gottcha.pl'. User will need to provide a FASTQ file
+The procedure includes 3 major steps: (1) split-trimming the input data, (2) mapping reads 
+to a GOTTCHA database using BWA, and (3) profiling/filtering the results. These steps have
+been wrapped into a sigle script called 'gottcha.pl'. User will need to provide a FASTQ file
 as input and specify the location and name of the database.
 
 Here is the general usage to run GOTTCHA:
 
- > $ bin/gottcha.pl -i <FASTQ> -d <PATH/DATABASE_PREFIX>
+ > $ bin/gottcha.pl -i \<FASTQ\> -d \<PATH/DATABASE_PREFIX\>
 
 We provided a testing FASTQ file and example output in ./test. The following command
-is an example to run "test.fastq" through GOTTCHA using a species level database with
+is an example that runs "test.fastq" through GOTTCHA using a species-level database with
 8 threads:
 
         $ bin/gottcha.pl             \
@@ -214,7 +221,7 @@ step.
 ### Visulizing Results using Krona
 
 [Krona](http://sourceforge.net/p/krona/home/krona/) is an interactive browser that allows 
-to explore hierarchical data with pie charts. Assumed you have Krona installed properly,
+the exploration of hierarchical data with pie charts. Assuming you have Krona installed properly,
 we are going to create a Krona chart from a text file listing abundance and lineages. 
 You will find <PREFIX>.lineage.tsv file when you run gottcha.pl in "all" output mode.
 

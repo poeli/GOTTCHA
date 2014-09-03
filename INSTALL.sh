@@ -161,6 +161,6 @@ Quick start:
     bin/gottcha.pl -i <FASTQ> -d <DATABASE>
 
 Check our bitbucket site for update:
-    https://bitbucket.org/poeli/gottcha
+    https://github.com/LANL-Bioinformatics/GOTTCHA
 
 ";

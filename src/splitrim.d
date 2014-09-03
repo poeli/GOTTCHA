@@ -218,7 +218,7 @@ immutable   string  PREFIX = "QC";
 /**********************************************************************/
 void verifyFastqFormat(std.stdio.File IN, ref bool newIlluminaFormat) {
 
-    ubyte[char] stdNucleotides = [ 'A':1, 'C':1, 'G':1, 'T':1, 'N':1 ];
+    ubyte[char] stdNucleotides = [ 'A':1, 'C':1, 'G':1, 'T':1, 'N':1, 'a':1, 'c':1, 'g':1, 't':1, 'n':1 ];
     enum ctr = ctRegex!(`^(\@.+\/\d+)\s(.+)`);          // Looking for /1 or /2 in OLD Illumina formats
 
     int lineCount = 0;
@@ -238,7 +238,7 @@ void verifyFastqFormat(std.stdio.File IN, ref bool newIlluminaFormat) {
             }
             else {                  // invalid
                 writeln("*FATAL*: Unrecognized FASTQ format!"); 
-                exit(0);
+                exit(1);
             }
             
         }
@@ -247,13 +247,13 @@ void verifyFastqFormat(std.stdio.File IN, ref bool newIlluminaFormat) {
                 //writeln("Base: ", base);
                 if(base !in stdNucleotides) {
                     writeln("*FATAL*: Unrecognized FASTQ format!"); 
-                    exit(0);
+                    exit(1);
                 }
             }
         }
         if((lineCount == 3) && (line[0] != '+')) {      // 3rd valid line should start with "+"
             writeln("*FATAL*: Unrecognized FASTQ format!"); 
-            exit(0);
+            exit(1);
         }
         if(lineCount == 4) {                            // 4th line is the quality line
             verifyAsciiEncoding(inOpts, line);
@@ -788,7 +788,7 @@ void trimEntry(inputOptions inOpts,
                             // Append to FASTQ TRIM file
                             ////////////////////////////
 
-                            enum ctr = ctRegex!(`^(\S+)\s+(.+)`);        // generate native machine code for regex at compile time
+                            enum ctr = ctRegex!(`^(\S+)\s?(.*)`);        // generate native machine code for regex at compile time
                             auto m = match(h1, ctr);                    // match and store
                             string h1leader  = m.captures[1];           // extract match #1
                             string h1trailer = m.captures[2];           // extract match #2
