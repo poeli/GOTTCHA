@@ -30,27 +30,13 @@
 # Los Alamos National Lab.
 # po-e@lanl.gov
 #
-# CHANGE LOG:
-#   Version 0.9a:
-#     05/12/2014 1.Add '--stDir' option for pre-splitrimmed input file
-#
-#     05/09/2014 1.This version used a pipeline version of
-#                  profileGOTTCHA.pl.
-#
-#   Version 0.9:
-#     04/30/2014 1.Provide bwaOpt option for user to use their own parameters to
-#                  run BWA-MEM.
-#                2.Use absolute path to run system calls
-#                3.Provide relAbu option to choose column to calculate relative
-#                  abundance.
-#
 
 use Getopt::Long;
 use FindBin qw($RealBin);
 use strict;
 
 # environment setup
-my $ver = "0.9a";
+my $ver = "0.9d";
 $ENV{PATH} = "$RealBin:$RealBin/../ext/bin:$ENV{PATH}";
 $ENV{PERL5LIB} = "$RealBin/../ext/lib/perl5:$ENV{PERL5LIB}";
 
@@ -79,7 +65,9 @@ my $res=GetOptions(\%opt,
     'debug',
     'help|h|?') || &usage();
 
-if ( $opt{help} || !-e $opt{input} || ! defined $opt{database} ) { &usage(); }
+if ( $opt{help} ) { &usage(); }
+if ( !-e $opt{input} && !-e $opt{stDir} ) { &usage("ERROR: No reads found."); }
+if ( ! defined $opt{database} ) { &usage("ERROR: Please specify a gottcha database."); }
 
 my ($fn) = $opt{input} =~ /([^\/]+)\.[^\.]+$/;
 $fn ||= "gottcha_output";
@@ -394,7 +382,10 @@ sub timeInterval{
 }
 
 sub usage {
+my $msg = shift;
 print <<__END__;
+$msg
+
 PROGRAM: GOTTCHA metagenomic taxonomic profiling tool
 
 VERSION: $ver

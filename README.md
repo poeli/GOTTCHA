@@ -246,3 +246,27 @@ Bioscience Division, Los Alamos National Laboratory, Los Alamos, NM 87545
 
 We would like to thank Jason Gans for critical discussions on classification and machine 
 learning techniques, and Shihai Feng for the generation of synthetic datasets.
+
+-------------------------------------------------------------------
+## CHANGE LOG
+
+Version 0.9d:
+> 1. Splitrim allows lower-case bases in fastq file
+> 2. Fix bugs that fail to specify output directory
+> 3. Minor bug fix
+
+Version 0.9c:
+> 1. Fix FASTQ header compatibility
+> 2. Provide more information while running GOTTCHA
+
+Version 0.9b (05/12/2014):
+> 1. Add '--stDir' option for pre-splitrimmed input file
+> 1. Performance improvement
+
+Version 0.9a (04/30/2014):
+> 1. Provide bwaOpt option for user to use their own parameters to run BWA-MEM.
+> 2. Use absolute path to run system calls
+> 3. Provide 'relAbui' option to choose column to calculate relative abundance.
+
+Version 0.9:
+> 1. Initial release
