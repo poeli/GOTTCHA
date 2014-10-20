@@ -94,8 +94,8 @@ into the next step.
 
 The "mkGottchaTaxTree.pl" file will generate TWO required custom-formatted files
 for the "gottcha.pl" program: the "speciesTreeGI.dmp" and "genomeVitals.dmp" 
-files. Both are Perl Storable-formatted files (see http://search.cpan.org/~ams/
-Storable/Storable.pm). In order to run "mkGottchaTaxTree.pl", first you will need
+files. Both are Perl Storable-formatted files (see http://search.cpan.org/~ams/Storable/Storable.pm
+). In order to run "mkGottchaTaxTree.pl", first you will need
 to download three NCBI taxonomy dump files from ftp://ftp.ncbi.nih.gov/pub/taxonomy
 directory. The "taxdump.tar.gz" file will provide the "names.dmp" and "nodes.dmp"
 files, while the "gi_taxid_nucl.dmp.gz" will provide the "gi_taxid_nucl.dmp" file.
