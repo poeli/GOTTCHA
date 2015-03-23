@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-#[COPYRIGHT]
+# [COPYRIGHT]
 #
 # Copyright (2014).  Los Alamos National Security, LLC. This material was produced
 #  under U.S. Government contract DE-AC52-06NA25396 for Los Alamos National Labora
@@ -36,7 +36,7 @@ use FindBin qw($RealBin);
 use strict;
 
 # environment setup
-my $ver = "0.9d";
+my $ver = "0.9e";
 $ENV{PATH} = "$RealBin:$RealBin/../ext/bin:$ENV{PATH}";
 $ENV{PERL5LIB} = "$RealBin/../ext/lib/perl5:$ENV{PERL5LIB}";
 
@@ -80,7 +80,7 @@ print "[$ct] Starting GOTTCHA v$ver\n";
 my $INPUT      = $opt{input};
 my $DB         = $opt{database};
 my $DBLVL      = $opt{dbLevel};
-my $THREADS    = defined $opt{threads} ? $opt{threads} : 2;
+my $THREADS    = $opt{threads};
 my $PREFIX     = defined $opt{prefix}  ? $opt{prefix}  : $fn;
 my $OUTDIR     = defined $opt{outdir}  ? $opt{outdir}  : ".";
 my $TMPDIR     = "${PREFIX}_temp";
@@ -123,15 +123,41 @@ my %db_level = (
 $DBLVL = lc $DBLVL;
 unless ( defined $db_level{$DBLVL} ){
     ($DBLVL) = $opt{database} =~ /\.(\w+)$/;
+	$DBLVL = lc $DBLVL;
     if( defined $db_level{$DBLVL} ){
         print "[$ct] Auto set database level to ".uc($DBLVL).".\n";
     }
-    else{
-        die "ERROR: Please specify database level using --dbLevel option.\n";
-    }
+	else{
+    	($DBLVL) = $opt{database} =~ /\.(\w+).\w+$/;
+		$DBLVL = lc $DBLVL;
+    	if( defined $db_level{$DBLVL} ){
+        	print "[$ct] Auto set database level to ".uc($DBLVL).".\n";
+		}
+    	else{
+        	die "ERROR: Please specify database level using --dbLevel option.\n";
+    	}
+	}
 }
 
+# number of threads
+$ct = &timeInterval($time);
+if( !defined $THREADS ){
+	print "[$ct] Number of threads is not specified. Autodetecting CPU numbers...\n";
+	my $autocpu = `cat /proc/cpuinfo | grep processor | wc -l`;
+	chomp $autocpu;
+	if( $autocpu > 0 ){
+		print "[$ct] $autocpu processor(s) detected.\n";
+		$THREADS = $autocpu;
+	}
+	else{
+		print "[$ct] Failed to detect the number of processor(s). Use default value (2).\n";
+		$THREADS = 2;
+	}
+}
+print "[$ct] Number of threads: $THREADS\n";
+
 #open (STDOUT, "| tee -a $LOGFILE");
+$ct = &timeInterval($time);
 `mkdir -p $OUTDIR/$TMPDIR`;
 $ct = &timeInterval($time);
 &executeCommand("rm $LOGFILE | touch $LOGFILE", "[$ct] ERROR: Failed to create logfile: $LOGFILE."); 
@@ -171,8 +197,14 @@ else{
     #print splitrim summary
     open STATS, "$STDIR/${PREFIX}_splitrim.stats.txt" or die "Can't open splitrim stats: $!\n";
     my @lines = <STATS>;
-    print "\n",join "", @lines[3..8],"\n";
+	$lines[4] =~ s/===/============/;
+	foreach my $line ( @lines[3..8], ){
+		$line =~ s/\cJ//;
+		my @temp = map { &thousandsSep($_) } split(/\t/, $line);
+		printf "%s  %15s  %15s  %s\n", @temp[0..2], defined $temp[3] ? $temp[3] : "";
+	}
     close STATS;
+	print "\n";
 }
 
 # run bwa and profiling results
@@ -204,14 +236,16 @@ while(<RUNNINGLOG>){
 close RUNNINGLOG;
 
 $ct = &timeInterval($time);
+
 print "\n";
-print "                        SPLIT-TRIMMED\n";
-print "                        =============\n";
-print "# of Processed Reads:   $bwa_processed\n";
-print "   # of Mapped Reads:   $bwa_mapped\n";
-print " # of Unmapped Reads:   $bwa_unmapped\n";
+print "                          SPLIT-TRIMMED\n";
+print "                          =============\n";
+printf "# of Processed Reads:  %16s\n", &thousandsSep($bwa_processed);
+printf "   # of Mapped Reads:  %16s\n", &thousandsSep($bwa_mapped);
+printf " # of Unmapped Reads:  %16s\n", &thousandsSep($bwa_unmapped);
 print "\n";
-print "[$ct] Done profiling mapping results. ($profile_taxa taxanomy(ies) found)\n";
+print "[$ct] Done profiling mapping results.\n";
+print "\n  $profile_taxa taxanomy(ies) found.\n\n";
 
 if( $bwa_mapped == 0){
     $ct = &timeInterval($time);
@@ -260,7 +294,8 @@ while(<ABUX>){
 close ABUX;
 
 $ct = &timeInterval($time);
-print "[$ct] Done filtering. ($filtered_tax_cnt taxanomy(ies) left)\n";
+print "[$ct] Done filtering.\n";
+print "\n  $filtered_tax_cnt taxanomy(ies) left.\n\n";
 
 if( $filtered_tax_cnt == 0){
     $ct = &timeInterval($time);
@@ -348,7 +383,7 @@ sub checkRunningEnv {
     if( my $file = &checkFileAbsence( "$DB.parsedGOTTCHA.dmp" ) ){
         my $ct = &timeInterval($time);
         print "[$ct] $DB.parsedGOTTCHA.dmp does not exist. Try to generate one ...\n";
-        &executeCommand( "profileGottcha.pl --db=$DB --make_dmp --prefix=$DB"
+        &executeCommand( "profileGottcha.pl --db=$DB --make_dmp"
                            , "[$ct] ERROR: Failed generating $DB.parsedGOTTCHA.dmp. Please check $LOGFILE for detail.");
         $ct = &timeInterval($time);
         print "[$ct] Done generating $DB.parsedGOTTCHA.dmp.\n";
@@ -379,6 +414,12 @@ sub timeInterval{
     my $strtime = shift;
     $strtime = time - $strtime;
     return sprintf "%02d:%02d:%02d", int($strtime / 3600), int(($strtime % 3600) / 60), int($strtime % 60);
+}
+
+sub thousandsSep {
+	my $num = shift;
+	$num =~ s/(\d{1,3}?)(?=(\d{3})+$)/$1,/g;
+	return $num;
 }
 
 sub usage {
@@ -466,6 +507,6 @@ USAGE: $0 [OPTIONS] --input <FASTQ> --database <DATABASE_PATH>
                            abundance calculation [10]
 
 __END__
-exit();
+exit 1;
 }
 

@@ -1822,7 +1822,7 @@ sub calculateUniqueLengthsByGI {
     print "done. ".timestr(timediff($iter1,$iter0))."\n";
 
     # Store parsed DB
-    my $outfile = $prefix ? "$outdir/$prefix.parsedGOTTCHA.dmp" : "$outdir/parsedGOTTCHA.dmp";
+    my $outfile = $prefix ? "$outdir/$prefix.parsedGOTTCHA.dmp" : "$dbFile.parsedGOTTCHA.dmp";
     $iter0 = new Benchmark;
     print "->Storing parsed version of DB to disk [$outfile]...";
     store \%gi2seqlen, $outfile;
@@ -3047,7 +3047,7 @@ Example:
 
 HELP
 print "$HELP\n";
-exit;
+exit 1;
 }
 
 ################################################################################
