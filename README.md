@@ -232,8 +232,7 @@ Use 'ktImportText' and save the chart to "test.krona.html":
 ------------------------------------------------------------------
 ## CITATION
 
-Tracey Allen K. Freitas, Po-E Li, Matthew B. Scholz, Patrick S. G. Chain: Accurate Metagenome 
-characterization using a hierarchical suite of unique signatures. (in submission)
+Tracey Allen K. Freitas, Po-E Li, Matthew B. Scholz and Patrick S. G. Chain (2015) **Accurate read-based metagenome characterization using a hierarchical suite of unique signatures,** Nucleic Acids Research (DOI: 10.1093/nar/gkv180)
 
 -------------------------------------------------------------------
 ## AUTHORS
@@ -247,8 +246,13 @@ Bioscience Division, Los Alamos National Laboratory, Los Alamos, NM 87545
 We would like to thank Jason Gans for critical discussions on classification and machine 
 learning techniques, and Shihai Feng for the generation of synthetic datasets.
 
+This project is funded by U.S. Defense Threat Reduction Agency [R-00059-12-0 and R-00332-13-0 to P.S.G.C.].
+
 -------------------------------------------------------------------
 ## CHANGE LOG
+Version 0.9e:
+> 1. Fix minor bugs
+> 2. Amend the display of runtime information
 
 Version 0.9d:
 > 1. Splitrim allows lower-case bases in fastq file
