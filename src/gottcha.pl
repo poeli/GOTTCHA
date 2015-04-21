@@ -36,18 +36,19 @@ use FindBin qw($RealBin);
 use strict;
 
 # environment setup
-my $ver = "0.9e";
-$ENV{PATH} = "$RealBin:$RealBin/../ext/bin:$ENV{PATH}";
+my $ver        = "1.0a";
+$ENV{PATH}     = "$RealBin:$RealBin/../ext/bin:$ENV{PATH}";
 $ENV{PERL5LIB} = "$RealBin/../ext/lib/perl5:$ENV{PERL5LIB}";
 
 $|=1;
 my %opt;
 my $res=GetOptions(\%opt,
     'input|i=s',
-    'database|d=s',
+    'database|db|d=s',
     'dbLevel|l=s',
     'mode|m=s',
-    'bwaOpt|b=s',
+    'noPlasmidHit|n',
+	'bwaOpt|b=s',
     'relAbu|r=s',
     'threads|t=s',
     'stDir|s=s',
@@ -62,14 +63,15 @@ my $res=GetOptions(\%opt,
     'taxLvl=s',
     'minLen=i',
     'minHits=i',
+    'dumpSam',
     'debug',
     'help|h|?') || &usage();
 
 if ( $opt{help} ) { &usage(); }
-if ( !-e $opt{input} && !-e $opt{stDir} ) { &usage("ERROR: No reads found."); }
-if ( ! defined $opt{database} ) { &usage("ERROR: Please specify a gottcha database."); }
+if ( !defined $opt{input} && !-e $opt{stDir} ) { &usage("ERROR: No reads found."); }
+if ( !defined $opt{database} ) { &usage("ERROR: Please specify a gottcha database."); }
 
-my ($fn) = $opt{input} =~ /([^\/]+)\.[^\.]+$/;
+my ($fn) = $opt{input} =~ /([^\/.]+)\.[^\/]+$/;
 $fn ||= "gottcha_output";
 
 my $time = time;
@@ -81,6 +83,7 @@ my $INPUT      = $opt{input};
 my $DB         = $opt{database};
 my $DBLVL      = $opt{dbLevel};
 my $THREADS    = $opt{threads};
+my $noPHit     = $opt{noPlasmidHit};
 my $PREFIX     = defined $opt{prefix}  ? $opt{prefix}  : $fn;
 my $OUTDIR     = defined $opt{outdir}  ? $opt{outdir}  : ".";
 my $TMPDIR     = "${PREFIX}_temp";
@@ -159,93 +162,168 @@ print "[$ct] Number of threads: $THREADS\n";
 #open (STDOUT, "| tee -a $LOGFILE");
 $ct = &timeInterval($time);
 `mkdir -p $OUTDIR/$TMPDIR`;
-$ct = &timeInterval($time);
-&executeCommand("rm $LOGFILE | touch $LOGFILE", "[$ct] ERROR: Failed to create logfile: $LOGFILE."); 
+&executeCommand("rm $LOGFILE | touch $LOGFILE", "ERROR: Failed to create logfile: $LOGFILE."); 
 
 # check running environment
 $ct = &timeInterval($time);
 print "[$ct] Checking running environment...\n";
 &checkRunningEnv();
 $ct = &timeInterval($time);
-print "[$ct] All required scripts and tools found.\n";
+print "[$ct] Done. All required scripts and tools found.\n";
 
 # run splitrim
-$ct = &timeInterval($time);
+my @fastqs = split /,/, $INPUT;
+my @st_fastq_files;
+my @st_stats_files;
 
 # check if pre-splitrimmed FASTQ provided
 if( defined $opt{stDir} ){
-    print "[$ct] Pre-splitrimmed directory is specified to $STDIR. Skip split-trimming.\n";
-    my $file = &checkFileAbsence("$STDIR/${PREFIX}_splitrim.fastq", "$STDIR/${PREFIX}_splitrim.stats.txt");
-    if( $file ){
-        die "[$ct] ERROR: Can't find $file in $STDIR directory.\n";
-    }
+    print "[$ct] Pre-splitrimmed directory is specified to $STDIR. Skip split-trimming step.\n";
+	foreach my $fastq ( @fastqs ){
+		my ($p) = $fastq =~ /^([^\/]+)\.\w+$/;
+    	my $file = &checkFileAbsence("$STDIR/${p}_splitrim.fastq", "$STDIR/${p}_splitrim.stats.txt");
+    	if( $file ){
+        	die "[$ct] ERROR: Can't find $file in $STDIR directory.\n";
+    	}
+		else{
+			push @st_fastq_files, "$STDIR/${p}_splitrim.fastq";
+			push @st_stats_files, "$STDIR/${p}_splitrim.stats.txt";
+		}
+	}
 }
 else{
-    print "[$ct] Split-trimming input reads (fixL=$TRIM_FIXL, minQ=$TRIM_MINQ, ascii=$TRIM_ASCII)\n";
-    &executeCommand("splitrim              \\
-                       --inFile=$INPUT     \\
-                       --fixL=$TRIM_FIXL   \\
-                       --recycle           \\
-                       --ascii=$TRIM_ASCII \\
-                       --minQ=$TRIM_MINQ   \\
-                       --prefix=${PREFIX}  \\
-                       --outPath=$STDIR"
-                    , "[$ct] Failed running splitrim. Please check $LOGFILE for detail.");
-    $ct = &timeInterval($time);
-    print "[$ct] Done splitrim.\n";
-    
-    #print splitrim summary
-    open STATS, "$STDIR/${PREFIX}_splitrim.stats.txt" or die "Can't open splitrim stats: $!\n";
-    my @lines = <STATS>;
-	$lines[4] =~ s/===/============/;
-	foreach my $line ( @lines[3..8], ){
-		$line =~ s/\cJ//;
-		my @temp = map { &thousandsSep($_) } split(/\t/, $line);
-		printf "%s  %15s  %15s  %s\n", @temp[0..2], defined $temp[3] ? $temp[3] : "";
+	print "[$ct] Split-trimming with parameters fixL=$TRIM_FIXL, minQ=$TRIM_MINQ, ascii=$TRIM_ASCII.\n";
+	foreach my $fastq ( @fastqs )
+	{
+		my ($p) = $fastq =~ /^([^\/]+)\.\w+$/;
+		print "[$ct] Split-trimming: $fastq...\n";
+		&executeCommand("splitrim                \\
+		                   --inFile=$fastq       \\
+		                   --fixL=$TRIM_FIXL     \\
+		                   --recycle             \\
+		                   --ascii=$TRIM_ASCII   \\
+		                   --minQ=$TRIM_MINQ     \\
+		                   --prefix=$p           \\
+		                   --outPath=$STDIR"
+		                , "Failed running splitrim. Please check $LOGFILE for detail.");
+		push @st_fastq_files, "$STDIR/${p}_splitrim.fastq";
+		push @st_stats_files, "$STDIR/${p}_splitrim.stats.txt";
+		$ct = &timeInterval($time);
+    	print "[$ct] Done splitrimming $fastq.\n";
 	}
-    close STATS;
-	print "\n";
 }
+
+# merging
+my $merged_stats;
+foreach my $stats ( @st_stats_files ){
+	open STATS, $stats or die "Can't open splitrim stats: $!\n";
+	my @lines = <STATS>;
+	my $tempidx=0;
+	foreach my $line ( @lines[3..7] ){
+		my @tmp = split(/\t/, $line);
+		$merged_stats->{$tempidx}->{"$tmp[0]"}->{LINE} = $line;
+		$merged_stats->{$tempidx}->{"$tmp[0]"}->{1} += $tmp[1];
+		$merged_stats->{$tempidx}->{"$tmp[0]"}->{2} += $tmp[2];
+		$tempidx++;
+	}
+	close STATS;
+}
+
+open STATS, ">$OUTDIR/$TMPDIR/${PREFIX}_splitrim.stats.txt" or die "Can't open splitrim stats: $!\n";
+print STATS "\n\n\n\n";
+foreach my $idx ( sort {$a<=>$b} keys %$merged_stats ){
+	foreach my $header ( keys %{$merged_stats->{$idx}} ){
+		if( $merged_stats->{$idx}->{$header}->{1} ){
+			if( $header =~ /^Mean/ ){
+				$merged_stats->{$idx}->{$header}->{1} /= scalar @fastqs;
+				$merged_stats->{$idx}->{$header}->{2} /= scalar @fastqs;
+			}
+
+			printf STATS "%s\t%d\t%d\t(%.2f %%)\n",
+				$header,
+				$merged_stats->{$idx}->{$header}->{1},
+				$merged_stats->{$idx}->{$header}->{2},
+				$merged_stats->{$idx}->{$header}->{2}/$merged_stats->{$idx}->{$header}->{1}*100
+			;
+		}
+		else{
+			print STATS $merged_stats->{$idx}->{$header}->{LINE};
+		}
+	}
+}
+close STATS;
+
+$ct = &timeInterval($time);
+print "[$ct] Done merging splitrim stats.\n";
+
+#print splitrim summary
+open STATS, "$OUTDIR/$TMPDIR/${PREFIX}_splitrim.stats.txt" or die "Can't open splitrim stats: $!\n";
+my @lines = <STATS>;
+$lines[4] =~ s/=+/=============/;
+foreach my $line ( @lines[3..8], ){
+	$line =~ s/\cJ//;
+	my @temp = map { &thousandsSep($_) } split(/\t/, $line);
+	printf "%s  %20s  %20s  %s\n", @temp[0..2], defined $temp[3] ? $temp[3] : "";
+}
+close STATS;
+print "\n";
 
 # run bwa and profiling results
 $ct = &timeInterval($time);
 print "[$ct] Mapping split-trimmed reads to GOTTCHA database and profiling...\n";
-my $BWA_DEBUG = "| tee $OUTDIR/$TMPDIR/$PREFIX.sam" if $DEBUG_MODE;
+my $sam_output = "$OUTDIR/$TMPDIR/$PREFIX.sam";
+$sam_output = "$OUTDIR/$PREFIX.gottcha.sam" if $opt{dumpSam}; 
+my $BWA_DEBUG = "| tee $sam_output" if $DEBUG_MODE || $opt{dumpSam};
+my $extra_opts = "-noPlasmidHit" if $noPHit;
+my $realTHREADS = $THREADS-1 < 1 ? 1 : $THREADS-2;
+my $st_filelist = join " ", @st_fastq_files;
 
-&executeCommand("bwa $BWAMETHOD $BWA_OPT -t $THREADS $DB $STDIR/${PREFIX}_splitrim.fastq $BWA_DEBUG \\
-                 | profileGottcha.pl                                          \\
+&executeCommand("cat $st_filelist | bwa $BWAMETHOD $BWA_OPT -t $realTHREADS $DB - $BWA_DEBUG \\
+                 | profileGottcha.pl $extra_opts                              \\
                      --parsedDB=$DB.parsedGOTTCHA.dmp                         \\
                      --sam                                                    \\
                      --outdir=$OUTDIR/$TMPDIR                                 \\
                      --prefix=$PREFIX                                         \\
-                     --trimStats=$STDIR/${PREFIX}_splitrim.stats.txt          \\
+                     --trimStats=$OUTDIR/$TMPDIR/${PREFIX}_splitrim.stats.txt \\
                      --treeFile=$DBPATH/speciesTreeGI.dmp                     \\
                      --genomeVitals=$DBPATH/genomeVitals.dmp                  \\
-                     --noFastqOut --method=1 > $OUTDIR/$TMPDIR/profileGottcha.log 2>&1"
-                , "[$ct] ERROR: Failed running BWA or profileGottcha.pl. Please check $LOGFILE for detail.");
+					 --noFastqOut --method=1 > $OUTDIR/$TMPDIR/profileGottcha.log 2>&1"
+                , "ERROR: Failed running BWA or profileGottcha.pl. Please check $LOGFILE for detail.");
 &executeCommand("cat $OUTDIR/$TMPDIR/profileGottcha.log >> $LOGFILE");
+
 #print bwa and profiling summary
-my ($bwa_read,$bwa_processed,$bwa_mapped,$bwa_unmapped,$profile_taxa) = (0,0,0,0,0);
+my ($bwa_read,
+	$bwa_read_raw,
+	$bwa_processed,
+	$bwa_mapped,
+	$bwa_mapped_plasmid,
+	$bwa_unmapped,
+	$profile_taxa,
+	$bwa_mapped_raw,
+	$bwa_mapped_raw_plasmid) = (0,0,0,0,0,0,0,0,0);
+
 open RUNNINGLOG, "$LOGFILE" or die "Can't open log file: $!\n";
 while(<RUNNINGLOG>){
-    ($bwa_mapped,$bwa_unmapped) = ($1,$2) if /Mapped split-trimmed reads: (\d+), Unmapped split-trimmed reads: (\d+)/;
-    $bwa_read+=$1 if /read (\d+) sequences/;
-    $bwa_processed+=$1 if /Processed (\d+) reads/;
-    $profile_taxa=$1 if /\.$DBLVL\.tsv\.ABU"\.\.\.done\. \((\d+) taxonomies\)/i;
+    ($bwa_mapped,$bwa_mapped_plasmid,$bwa_unmapped, $bwa_mapped_raw, $bwa_mapped_raw_plasmid) = ($1,$2,$3,$4,$5) if /Mapped split-trimmed reads: (\d+); Mapped split-trimmed reads to plasmids: (\d+); Unmapped split-trimmed reads: (\d+); Mapped raw reads: (\d+); Mapped raw reads to plasmids: (\d+)/;
+    ($bwa_read_raw, $bwa_read) = ($1,$2) if /found (\d+) reads \(split-trimmed: (\d+)\)/;
+    $bwa_processed = $1 if /Processed (\d+) reads/;
+    $profile_taxa = $1 if /\.$DBLVL\.tsv\.ABU"\.\.\.done\. \((\d+) taxonomie/i;
 }
 close RUNNINGLOG;
 
 $ct = &timeInterval($time);
 
-print "\n";
-print "                          SPLIT-TRIMMED\n";
-print "                          =============\n";
-printf "# of Processed Reads:  %16s\n", &thousandsSep($bwa_processed);
-printf "   # of Mapped Reads:  %16s\n", &thousandsSep($bwa_mapped);
-printf " # of Unmapped Reads:  %16s\n", &thousandsSep($bwa_unmapped);
-print "\n";
-print "[$ct] Done profiling mapping results.\n";
-print "\n  $profile_taxa taxanomy(ies) found.\n\n";
+print  "\n";
+print  "                                       RAW         SPLIT-TRIMMED\n";
+print  "                             =============         =============\n";
+printf "# of Processed Reads: %20s  %20s\n",                &thousandsSep($bwa_read_raw), &thousandsSep($bwa_read);
+printf "   # of Mapped Reads: %20s  %20s (genome)\n",       &thousandsSep($bwa_mapped_raw), &thousandsSep($bwa_mapped);
+printf "   # of Mapped Reads: %20s  %20s (plasmid only)\n", &thousandsSep($bwa_mapped_raw_plasmid),  &thousandsSep($bwa_mapped_plasmid);
+printf " # of Unmapped Reads: %20s  %20s\n",                &thousandsSep($bwa_read_raw-$bwa_mapped_raw), &thousandsSep($bwa_unmapped);
+print  "\n";
+print  "[$ct] Done profiling mapping results.\n";
+print  "[$ct] The noPlasmidHit option is ON. $bwa_mapped_plasmid plasmid hits will be ignored.\n" if $noPHit;
+print  "\n  $profile_taxa taxanomy(ies) found.\n\n";
 
 if( $bwa_mapped == 0){
     $ct = &timeInterval($time);
@@ -255,7 +333,7 @@ if( $bwa_mapped == 0){
 
 # run filterGottcha.pl
 $ct = &timeInterval($time);
-print "[$ct] Filtering profiling results...\n";
+print "[$ct] Removing taxanomy(ies) that has insufficient coverage...\n";
 &executeCommand("filterGottcha.pl                             \\
                    --strain=$DBPATH/variantStrainLookup.dmp   \\
                    --species=$DBPATH/variantSpeciesLookup.dmp \\
@@ -337,11 +415,11 @@ print "[$ct] Finished.\n";
 
 sub checkRunningEnv {
     my $ct = &timeInterval($time);
-    &executeCommand("hash splitrim 2>/dev/null", "[$ct] ERROR: splitrim not found. Please check your path or run INSTALL.sh.");
-    &executeCommand("hash bwa 2>/dev/null", "[$ct] ERROR: bwa not found. Please check your path or run INSTALL.sh.");
-    &executeCommand("hash profileGottcha.pl 2>/dev/null", "[$ct] ERROR: profileGottcha.pl not found. Please check your path or run INSTALL.sh.");
-    &executeCommand("hash filterGottcha.pl 2>/dev/null", "[$ct] ERROR: filterGottcha.pl not found. Please check your path or run INSTALL.sh.");
-    &executeCommand("hash convert_abu2list.pl 2>/dev/null", "[$ct] ERROR: convert_abu2list.pl not found. Please check your path or run INSTALL.sh.");
+    &executeCommand("hash splitrim 2>/dev/null", "ERROR: splitrim not found. Please check your path or run INSTALL.sh.");
+    &executeCommand("hash bwa 2>/dev/null", "ERROR: bwa not found. Please check your path or run INSTALL.sh.");
+    &executeCommand("hash profileGottcha.pl 2>/dev/null", "ERROR: profileGottcha.pl not found. Please check your path or run INSTALL.sh.");
+    &executeCommand("hash filterGottcha.pl 2>/dev/null", "ERROR: filterGottcha.pl not found. Please check your path or run INSTALL.sh.");
+    &executeCommand("hash convert_abu2list.pl 2>/dev/null", "ERROR: convert_abu2list.pl not found. Please check your path or run INSTALL.sh.");
 
     my $file = &checkFileAbsence( "$DBPATH/genomeVitals.dmp", "$DBPATH/speciesTreeGI.dmp" );
    
@@ -384,7 +462,7 @@ sub checkRunningEnv {
         my $ct = &timeInterval($time);
         print "[$ct] $DB.parsedGOTTCHA.dmp does not exist. Try to generate one ...\n";
         &executeCommand( "profileGottcha.pl --db=$DB --make_dmp"
-                           , "[$ct] ERROR: Failed generating $DB.parsedGOTTCHA.dmp. Please check $LOGFILE for detail.");
+                           , "ERROR: Failed generating $DB.parsedGOTTCHA.dmp. Please check $LOGFILE for detail.");
         $ct = &timeInterval($time);
         print "[$ct] Done generating $DB.parsedGOTTCHA.dmp.\n";
     }
@@ -396,8 +474,9 @@ sub executeCommand {
     $msg ||= "the command failed.\n";
     my $debug_cmd = "set -x; " if $DEBUG_MODE;
     my $exit_code = system("( $debug_cmd$command ) >> $LOGFILE 2>&1");
+	my $ct = &timeInterval($time);
     unless ( $exit_code == 0 ){
-        print "$msg\n";
+        print "[$ct] $msg\n";
         exit 1;
     }
 }
@@ -442,7 +521,9 @@ mapping reads to a GOTTCHA database using BWA, profiling/filtering the result.
 
 USAGE: $0 [OPTIONS] --input <FASTQ> --database <DATABASE_PATH>
 
-    --input|i    <STRING>  Input a single-ended FASTQ file.
+    --input|i    <STRING>  Input one or multiple FASTQ file(s). Use comma (,)
+                           to separate multiple input files.
+	                       
     --database|d <STRING>  The path of signature database. The database can be
                            in FASTA format or BWA index (5 files).
 
@@ -450,7 +531,7 @@ USAGE: $0 [OPTIONS] --input <FASTQ> --database <DATABASE_PATH>
 
   *** GENERAL OPTIONS ***
 
-    --threads|t  <INT>     Number of threads [default: 2]
+    --threads|t  <INT>     Number of threads [default: auto-detect]
     --dbLevel|l  <STRING>  Specify the taxonomic level of the input database 
                            (e.g. family, species, genus, strain, etc.). The
                            value will be auto-detected if the input database
@@ -474,6 +555,8 @@ USAGE: $0 [OPTIONS] --input <FASTQ> --database <DATABASE_PATH>
                                        keep all output files that were 
                                        generated by each profiling step.
                            [default: summary]
+    --noPlasmidHit|n       Ignore alignments that hit to plasmids
+                           [default: null]
     --bwaOpt|b   <STRING>  BWA-MEM in this script is used to map input reads to 
                            GOTTCHA database. If you want to run it with your own
                            parameters, use this option to specify.
@@ -482,7 +565,7 @@ USAGE: $0 [OPTIONS] --input <FASTQ> --database <DATABASE_PATH>
                            files. E.g. input file is "test.fastq", the script
                            will looking for "test_splitrim.fastq" and
                            "test_splitrim.stats.txt" in the specified directory.
-    --help/h/?             display this help                   
+    --dumpSam              Dump the mapping result in SAM format.
 
   *** OPTIONS FOR SPLIT-TRIMMING READS ***
 
@@ -505,6 +588,8 @@ USAGE: $0 [OPTIONS] --input <FASTQ> --database <DATABASE_PATH>
                            abundance calculation [default: 100]
     --minHits    <INT>     Minimum number of hits to be considered valid in 
                            abundance calculation [10]
+    
+    --help/h/?             display this help                   
 
 __END__
 exit 1;
