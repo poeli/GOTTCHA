@@ -36,7 +36,7 @@ use FindBin qw($RealBin);
 use strict;
 
 # environment setup
-my $ver        = "1.0a";
+my $ver        = "1.0b";
 $ENV{PATH}     = "$RealBin:$RealBin/../ext/bin:$ENV{PATH}";
 $ENV{PERL5LIB} = "$RealBin/../ext/lib/perl5:$ENV{PERL5LIB}";
 

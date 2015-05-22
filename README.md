@@ -265,6 +265,9 @@ This project is funded by U.S. Defense Threat Reduction Agency [R-00059-12-0 and
 
 -------------------------------------------------------------------
 ## CHANGE LOG
+Version 1.0b:
+> Bug fix for database inconsistency.
+
 Version 1.0a:
 > 1. Support multiple input files.
 > 2. Add "--dumpSam" option to dump the mapping result.

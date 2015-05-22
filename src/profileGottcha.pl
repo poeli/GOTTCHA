@@ -1,8 +1,9 @@
 #!/usr/bin/env perl
 #
 # /*                            
-#     Program:      profileDTAR_v1.1.pl 
-#     Author:       Tracey Freitas, Po-E Li
+#     Program:      profileDTAR.pl 
+#     Author:       Tracey Freitas
+#     Revision:     Po-E Li
 #     Created:      2011-09-19
 #     Email:        traceyf@lanl.gov
 #     Last Updated: 2013-01-15 (v2.10)
@@ -11,7 +12,7 @@
 #                   2013-04-11 (v2.14b)
 #                   2014-05-08 (v2.15)
 #
-#     2015-05-08:   (1) SAM file can be inputted through STDIN.
+#     2014-05-08:   (1) SAM file can be inputted through STDIN.
 #                   (2) Merging format checking and parsing to the same loop for SAM input
 #
 #     2014-04-20:   Default parsedDTAR file changes filename to *.parsedGOTTCHA.dmp
@@ -217,12 +218,14 @@ my $prefix          = q{};
 my $noMappedFastq   = 0;
 my $noUnmappedFastq = 0;
 my $noFastqOut      = 0;
+my $noPlasmidHit    = 0;
 #---------------------------
 my $findTopHit       = 0;
 my $method           = 0;
 my %methods          = (1 => q{}, 2 => q{}, 3 => q{});
 my @wantedMethods    = ();      # populated in sub checkInput()
 my $fieldSep         = "\t";
+my $abuField         = "LINEAR_DOC";
 my $minCoverage      = 0.005; #0.038 / 0.005 / 0.001
 my $minHits          = 5;
 my $minLength        = 100;
@@ -278,6 +281,7 @@ GetOptions(
     # Selection criteria:
     #-----------------------------------------
     "minID"             => \$minPctID,          # Minimum %ID to filter out
+	"noPlasmidHit"      => \$noPlasmidHit,      # ignore signatures in plasmid
     #=========================================
     # Output Options
     #=========================================
@@ -298,6 +302,8 @@ GetOptions(
     #-----------------------------------------
     # Abundance Filter 1: Coverage-based
     #-----------------------------------------
+    "abuField=s"        => \$abuField,      # FILTER1a: minimum best_LINEAR_COVERAGE
+    # Criteria: PASS if((best_LINEAR_COV > minCov) 
     # Criteria: PASS if((best_LINEAR_COV > minCov) 
     #                && (best_HIT_COUNT  > minHits) 
     #                && (best_LINEAR_LEN > minLength))
@@ -521,7 +527,7 @@ sub abundanceMethod1 {
     $_[0]->{$nextIdx}->{NAME} = "REL_ABUNDANCE";
     
     # Find the LINEAR_DOC column header
-    my $linearDOCidx = getIdxOfHeader("LINEAR_DOC", $_[0]);
+    my $abuFieldIdx = getIdxOfHeader($abuField, $_[0]);
 
     # Add FILTER here
     #     LINEAR_LENGTH   > 100
@@ -536,9 +542,9 @@ sub abundanceMethod1 {
 
         # FILTER
         if (
-                     ($_[0]->{23}->{VAL}->{$_} < $abuOpts{MIN_COV})     # best_LINEAR_COV
-                  || ($_[0]->{24}->{VAL}->{$_} < $abuOpts{MIN_HITS})    # best_HIT_COUNT
-                  || ($_[0]->{20}->{VAL}->{$_} < $abuOpts{MIN_LEN})     # best_LINEAR_LENGTH
+                     ($_[0]->{25}->{VAL}->{$_} < $abuOpts{MIN_COV})     # best_LINEAR_COV
+                  || ($_[0]->{26}->{VAL}->{$_} < $abuOpts{MIN_HITS})    # best_HIT_COUNT
+                  || ($_[0]->{22}->{VAL}->{$_} < $abuOpts{MIN_LEN})     # best_LINEAR_LENGTH
                 ){
         	$_[0]->{$nextIdx}->{VAL}->{$_} = "filtered";
                 next;
@@ -546,19 +552,19 @@ sub abundanceMethod1 {
 
         # A low MEAN_LINEAR_HIT_LENGTH with a low coverage suggests background or unknown bleed-through
         if(
-                ($_[0]->{33}->{VAL}->{$_} < $abuOpts{MIN_MLHL})         # best_MEAN_LINEAR_HIT_LENGTH
-             && ($_[0]->{23}->{VAL}->{$_} < $abuOpts{CCOV})             # best_LINEAR_COV
+                ($_[0]->{35}->{VAL}->{$_} < $abuOpts{MIN_MLHL})         # best_MEAN_LINEAR_HIT_LENGTH
+             && ($_[0]->{25}->{VAL}->{$_} < $abuOpts{CCOV})             # best_LINEAR_COV
                ){
 		$_[0]->{$nextIdx}->{VAL}->{$_} = "filtered";
                 next;
 	}
 
         push(@qualIdx, $_);
-        $relAbundanceSum += $_[0]->{$linearDOCidx}->{VAL}->{$_};
+        $relAbundanceSum += $_[0]->{$abuFieldIdx}->{VAL}->{$_};
     }
 
     #for (0..$totalEntries-1) {
-    #    my $relAbundance               = sprintf("%.15f", $_[0]->{$linearDOCidx}->{VAL}->{$_} / $relAbundanceSum);
+    #    my $relAbundance               = sprintf("%.15f", $_[0]->{$abuFieldIdx}->{VAL}->{$_} / $relAbundanceSum);
     #    $_[0]->{$nextIdx}->{VAL}->{$_} = $relAbundance;
     #    $maxRelAbundance = $relAbundance if($relAbundance > $maxRelAbundance);
     #}
@@ -566,7 +572,7 @@ sub abundanceMethod1 {
     # Loop through each entry, creating its new abundance value
     my $maxRelAbundance = 0;               # Set some arbitrary max
     foreach (@qualIdx) {
-        my $relAbundance = sprintf("%.15f", $_[0]->{$linearDOCidx}->{VAL}->{$_} / $relAbundanceSum);
+        my $relAbundance = sprintf("%.15f", $_[0]->{$abuFieldIdx}->{VAL}->{$_} / $relAbundanceSum);
         $_[0]->{$nextIdx}->{VAL}->{$_} = $relAbundance;
         $maxRelAbundance = $relAbundance if($relAbundance > $maxRelAbundance);
     }
@@ -607,6 +613,7 @@ sub exportUpdatedTable {
     print $OUTFILE join("\t", map { $_[0]->{$_}->{NAME} } @sortedHeaderIndices)."\n";
     my @sortedEntryIndices = sort { $a <=> $b } keys %{ $_[0]->{0}->{VAL} };
     my $taxa_cnt=0;
+    my $taxa_cnt_f=0;
 
     foreach my $entryIdx (@sortedEntryIndices) {
         foreach my $sortedHeaderIdx (0..$#sortedHeaderIndices) {
@@ -618,12 +625,13 @@ sub exportUpdatedTable {
             }
         }
         print $OUTFILE "\n";
-	$taxa_cnt++;
+		$taxa_cnt++;
+		$taxa_cnt_f++ if $_[0]->{$#sortedHeaderIndices}->{VAL}->{$entryIdx} eq "filtered";
     }
         
     close $OUTFILE;
     
-    print "done. ($taxa_cnt taxonomies)\n";
+    print "done. ($taxa_cnt taxonomie(s), $taxa_cnt_f filtered)\n";
     
 }
 ################################################################################
@@ -981,7 +989,8 @@ sub computeData {
                   #."GI_ENTRIES\t".                  
         ."NUM_SUBRANKS\t".                  "GPROJ_ENTRIES\t".              "LINEAR_LENGTH\t"
         ."UNIQUE_DB_LENGTH\t".              "FULL_REFDB_LENGTH\t".          "LINEAR_COV\t"
-        ."HIT_COUNT\t".                     "FULL_HIT_COUNT\t".             "TOTAL_BP_MAPPED\t".            "LINEAR_DOC\t"
+        ."HIT_COUNT\t".                     "HIT_COUNT_PLASMID\t".          "READ_COUNT\t"
+		."FULL_HIT_COUNT\t".                "TOTAL_BP_MAPPED\t".            "LINEAR_DOC\t"
         ."UREF_DOC\t".                      "UREF_CMAX\t".                  "FRAC_HITS_POSSIBLE\t"
         ."FRAC_BASES_POSSIBLE\t".           "MEAN_HIT_LENGTH\t".            "MEAN_LINEAR_HIT_LENGTH\t"
         #------------------------------------------------------------------------------------------
@@ -1025,6 +1034,8 @@ sub computeData {
                 
         my $linearCoverage         = sprintf("%.15f", $hitTree->{$_[2]}->{$rankName}->{COV});       # total linear coverage
         my $hitCount               = $hitTree->{$_[2]}->{$rankName}->{HITCOUNT};     # total hit count
+        my $hitCountP              = $hitTree->{$_[2]}->{$rankName}->{HITCOUNT_P};     # total hit count
+        my $readCount              = $hitTree->{$_[2]}->{$rankName}->{READCOUNT};    # total read count
         my $fullReadHitCount       = 0; #$hitTree->{$_[2]}->{$rankName}->{FULLREADHITS}; # total hit count (in terms of full-length reads)
         my $totalBpMapped          = $hitTree->{$_[2]}->{$rankName}->{MAPPED};       # total bases mapped (sum of all hits)
         my $fullRefDBlength        = $hitTree->{$_[2]}->{$rankName}->{REFSIZE};      # total bases in the COMPLETE reference (not just the unique bases)
@@ -1080,6 +1091,8 @@ sub computeData {
                       .$linearCoverage."\t"
                       #.$fullLengthHitCount."\t"                     #
                       .$hitCount."\t"
+                      .$hitCountP."\t"
+                      .$readCount."\t"
                       .$fullReadHitCount."\t"
                       .$totalBpMapped."\t"
                       .$linearDOC."\t"
@@ -1267,7 +1280,8 @@ sub computeRepliconData {
     print $OUTFILE "STRAIN-LEVEL_REPLICON\t" if(!$noVitalsFile);
     print $OUTFILE "GI\t".                     "GPROJ_ENTRIES\t".             "LINEAR_LENGTH\t"
                   ."UNIQUE_DB_LENGTH\t".       "FULL_REFDB_LENGTH\t".         "LINEAR_COV\t"
-                  ."HIT_COUNT\t".              "FULL_HIT_COUNT\t".            "TOTAL_BP_MAPPED\t".           "LINEAR_DOC\t"
+                  ."HIT_COUNT\t".              "HIT_COUNT_PLASMID\t".         "READ_COUNT\t"
+		          ."FULL_HIT_COUNT\t".         "TOTAL_BP_MAPPED\t".           "LINEAR_DOC\t"
                   ."UREF_DOC\t".               "UREF_CMAX\t".                 "FRAC_HITS_POSSIBLE\t"
                   ."FRAC_BASES_POSSIBLE\t".    "MEAN_HIT_LENGTH\t".           "MEAN_LINEAR_HIT_LENGTH\t"
                   #------------------------------------------------------------------------------------------
@@ -1339,21 +1353,23 @@ sub computeRepliconData {
 
         print $OUTFILE $replicon."\t" if(!$noVitalsFile);
         print $OUTFILE $gi."\t"
-                      ."1\t"                                                # supposed to be the "No. of Genome Projects" but since its a replicon, it's always one
-                      .$_[0]->{N_O_COV_HREF}->{$gi}->{LINLEN}."\t"          # non-overlapping length (i.e. Linear Length)
-                      .$uniqueDBlength."\t"                                 # unique DB length
-                      .$_[0]->{GVITALS_HREF}->{GI}->{$gi}->{SIZE}."\t"      # full reference length of replicon, not just unique length
-                      .$_[0]->{N_O_COV_HREF}->{$gi}->{COV}."\t"             # linear coverage
-                      .$_[0]->{GI2MERGEDFRAGS_HREF}->{$gi}->{HITCOUNT}."\t" # no. of counted hits to reference
-                      .$fullReadHitCount."\t"                               # no. of full read hits to reference
-                      .$totalBpMapped."\t"                                  # total BP mapped
-                      .$linearDOC."\t"                                      # linear depth-of-coverage
-                      .$uniqueDOC."\t"                                      # unique genome depth-of-coverage
-                      .$uRefCmax."\t"                                       # max coverage of unique DB given sample input
-                      .$fracHitsPossible."\t"                               # fraction of all possible hits
-                      .$fracBasesPossible."\t"                              # fraction of all possible bases
-                      .$mean_hit_length."\t"                                # totalBPmapped/HitCount
-                      .$mean_linear_hit_length."\t";                        # LinearLength/HitCount
+                      ."1\t"                                                  # supposed to be the "No. of Genome Projects" but since its a replicon, it's always one
+                      .$_[0]->{N_O_COV_HREF}->{$gi}->{LINLEN}."\t"            # non-overlapping length (i.e. Linear Length)
+                      .$uniqueDBlength."\t"                                   # unique DB length
+                      .$_[0]->{GVITALS_HREF}->{GI}->{$gi}->{SIZE}."\t"        # full reference length of replicon, not just unique length
+                      .$_[0]->{N_O_COV_HREF}->{$gi}->{COV}."\t"               # linear coverage
+                      .$_[0]->{GI2MERGEDFRAGS_HREF}->{$gi}->{HITCOUNT}."\t"   # no. of counted hits to reference
+                      .$_[0]->{GI2MERGEDFRAGS_HREF}->{$gi}->{HITCOUNT_P}."\t" # no. of counted hits to reference (plasmid)
+                      .$_[0]->{GI2MERGEDFRAGS_HREF}->{$gi}->{READCOUNT}."\t"  # no. of counted reads hits to reference
+                      .$fullReadHitCount."\t"                                 # no. of full read hits to reference
+                      .$totalBpMapped."\t"                                    # total BP mapped
+                      .$linearDOC."\t"                                        # linear depth-of-coverage
+                      .$uniqueDOC."\t"                                        # unique genome depth-of-coverage
+                      .$uRefCmax."\t"                                         # max coverage of unique DB given sample input
+                      .$fracHitsPossible."\t"                                 # fraction of all possible hits
+                      .$fracBasesPossible."\t"                                # fraction of all possible bases
+                      .$mean_hit_length."\t"                                  # totalBPmapped/HitCount
+                      .$mean_linear_hit_length."\t";                          # LinearLength/HitCount
 
         my @contigLengths = sort {$b <=> $a} keys %{ $giHisto{$gi} };
 
@@ -1426,7 +1442,6 @@ sub computeRepliconData {
         # Print out the N50:N60:N70:N80:N90:N95 string
         # ----------------------------------
         print $OUTFILE $n50.":".$n60.":".$n70.":".$n80.":".$n90.":".$n95."\n";
-
     }
     
     close $OUTFILE;
@@ -1552,8 +1567,11 @@ sub genTree {
             my $refsize       = $_[3]->{GI}->{$gi}->{SIZE};
             my $usize         = $_[0]->{$gi}->{USIZE};
             my $linlen        = $_[0]->{$gi}->{LINLEN};
+            my $linlenP       = $_[0]->{$gi}->{LINLENP};
             my $cov           = $_[0]->{$gi}->{COV};
             my $hitcount      = $_[1]->{$gi}->{HITCOUNT};
+            my $hitcountP     = $_[1]->{$gi}->{HITCOUNT_P};
+            my $readcount     = $_[1]->{$gi}->{READCOUNT};
             my $fullReadHits  = 0; #$_[2]->{$gi}->{FULLREADHITS};
             my $totalBPmapped = $_[2]->{$gi}->{TOTALBPMAPPED};
         
@@ -1562,6 +1580,8 @@ sub genTree {
             $hitTree{GI}->{$gi}->{LINLEN}        = $linlen;
             $hitTree{GI}->{$gi}->{COV}           = $cov;
             $hitTree{GI}->{$gi}->{HITCOUNT}      = $hitcount;
+            $hitTree{GI}->{$gi}->{HITCOUNT_P}    = $hitcountP;
+            $hitTree{GI}->{$gi}->{READCOUNT}     = $readcount;
             $hitTree{GI}->{$gi}->{FULLREADHITS}  = $fullReadHits;
             $hitTree{GI}->{$gi}->{MAPPED}        = $totalBPmapped;
             $hitTree{GI}->{$gi}->{HISTO}         = $giHisto{$gi};
@@ -1606,6 +1626,8 @@ sub genTree {
             $hitTree{SS}->{$strainName}->{USIZE}         += $usize;
             $hitTree{SS}->{$strainName}->{LINLEN}        += $linlen;
             $hitTree{SS}->{$strainName}->{HITCOUNT}      += $hitcount;
+            $hitTree{SS}->{$strainName}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{SS}->{$strainName}->{READCOUNT}     += $readcount;
             $hitTree{SS}->{$strainName}->{MAPPED}        += $totalBPmapped;
             $hitTree{SS}->{$strainName}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{SS}->{$strainName}->{CHILDREN}->{NAMES}->{$gi} = ();
@@ -1615,6 +1637,8 @@ sub genTree {
             $hitTree{S}->{$speciesName}->{USIZE}         += $usize;
             $hitTree{S}->{$speciesName}->{LINLEN}        += $linlen;
             $hitTree{S}->{$speciesName}->{HITCOUNT}      += $hitcount;
+            $hitTree{S}->{$speciesName}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{S}->{$speciesName}->{READCOUNT}     += $readcount;
             $hitTree{S}->{$speciesName}->{MAPPED}        += $totalBPmapped;
             $hitTree{S}->{$speciesName}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{S}->{$speciesName}->{CHILDREN}->{NAMES}->{$strainName} = ();
@@ -1624,6 +1648,8 @@ sub genTree {
             $hitTree{G}->{$genusName}->{USIZE}         += $usize;
             $hitTree{G}->{$genusName}->{LINLEN}        += $linlen;
             $hitTree{G}->{$genusName}->{HITCOUNT}      += $hitcount;
+            $hitTree{G}->{$genusName}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{G}->{$genusName}->{READCOUNT}     += $readcount;
             $hitTree{G}->{$genusName}->{MAPPED}        += $totalBPmapped;
             $hitTree{G}->{$genusName}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{G}->{$genusName}->{CHILDREN}->{NAMES}->{$speciesName} = ();
@@ -1633,6 +1659,8 @@ sub genTree {
             $hitTree{F}->{$familyName}->{USIZE}         += $usize;
             $hitTree{F}->{$familyName}->{LINLEN}        += $linlen;
             $hitTree{F}->{$familyName}->{HITCOUNT}      += $hitcount;
+            $hitTree{F}->{$familyName}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{F}->{$familyName}->{READCOUNT}     += $readcount;
             $hitTree{F}->{$familyName}->{MAPPED}        += $totalBPmapped;
             $hitTree{F}->{$familyName}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{F}->{$familyName}->{CHILDREN}->{NAMES}->{$genusName} = ();
@@ -1642,6 +1670,8 @@ sub genTree {
             $hitTree{O}->{$orderName}->{USIZE}         += $usize;
             $hitTree{O}->{$orderName}->{LINLEN}        += $linlen;
             $hitTree{O}->{$orderName}->{HITCOUNT}      += $hitcount;
+            $hitTree{O}->{$orderName}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{O}->{$orderName}->{READCOUNT}     += $readcount;
             $hitTree{O}->{$orderName}->{MAPPED}        += $totalBPmapped;
             $hitTree{O}->{$orderName}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{O}->{$orderName}->{CHILDREN}->{NAMES}->{$familyName} = ();
@@ -1651,6 +1681,8 @@ sub genTree {
             $hitTree{C}->{$className}->{USIZE}         += $usize;
             $hitTree{C}->{$className}->{LINLEN}        += $linlen;
             $hitTree{C}->{$className}->{HITCOUNT}      += $hitcount;
+            $hitTree{C}->{$className}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{C}->{$className}->{READCOUNT}     += $readcount;
             $hitTree{C}->{$className}->{MAPPED}        += $totalBPmapped;
             $hitTree{C}->{$className}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{C}->{$className}->{CHILDREN}->{NAMES}->{$orderName} = ();
@@ -1660,6 +1692,8 @@ sub genTree {
             $hitTree{P}->{$phylumName}->{USIZE}         += $usize;
             $hitTree{P}->{$phylumName}->{LINLEN}        += $linlen;
             $hitTree{P}->{$phylumName}->{HITCOUNT}      += $hitcount;
+            $hitTree{P}->{$phylumName}->{HITCOUNT_P}    += $hitcountP;
+            $hitTree{P}->{$phylumName}->{READCOUNT}     += $readcount;
             $hitTree{P}->{$phylumName}->{MAPPED}        += $totalBPmapped;
             $hitTree{P}->{$phylumName}->{FULLREADHITS}  += $fullReadHits;
             $hitTree{P}->{$phylumName}->{CHILDREN}->{NAMES}->{$className} = ();
@@ -1810,6 +1844,7 @@ sub calculateUniqueLengthsByGI {
             $gi2seqlen{$gi}->{FRAG}->{$giFrag} = $6; # length of unique frag
             $gi2seqlen{$gi}->{LENGTH}         += $6; # total length of gi
             $gi2seqlen{$gi}->{COUNT}++;              # no. of frags
+            $gi2seqlen{$gi}->{PLASMID} = $fasta{$header} ? 1 : 0;  #location (plasmid or not)
 
         } #FIELDS[2]
         else {
@@ -2251,7 +2286,9 @@ sub mergeOverlappingHits {                                                      
         } #GIFRAG
         
         # Record no. of actual hits to the reference GI
-        $gi2mergedFrags{$gi}->{HITCOUNT} = $_[0]->{$gi}->{HITCOUNT};  
+        $gi2mergedFrags{$gi}->{HITCOUNT}   = $_[0]->{$gi}->{HITCOUNT};  
+        $gi2mergedFrags{$gi}->{HITCOUNT_P} = $_[0]->{$gi}->{HITCOUNT_P};  
+        $gi2mergedFrags{$gi}->{READCOUNT}  = $_[0]->{$gi}->{READCOUNT};  
         
     } #GI
     
@@ -2409,13 +2446,17 @@ sub parseSAM {
     my $mappedTrimmedReadsFilename   = $outdir."/".$prefix.".MAPPED.trimmed.fastq";
     my $unmappedTrimmedReadsFilename = $outdir."/".$prefix.".UNMAPPED.trimmed.fastq";
 
-    my $MAPPED_TRIMMEDREADS_CNT   = 0;
-    my $UNMAPPED_TRIMMEDREADS_CNT = 0; 
-    my $MAPPED_TRIMMEDREADS   = q{};
-    my $UNMAPPED_TRIMMEDREADS = q{};
+    my $MAPPED_TRIMMEDREADS_CNT         = 0;
+    my $MAPPED_PLASMID_TRIMMEDREADS_CNT = 0;
+    my $UNMAPPED_TRIMMEDREADS_CNT       = 0;
+	my $MAPPED_RAWREADS_CNT             = 0;
+	my $MAPPED_PLASMID_RAWREADS_CNT     = 0;
+    my $MAPPED_TRIMMEDREADS             = q{};
+    my $UNMAPPED_TRIMMEDREADS           = q{};
     open $MAPPED_TRIMMEDREADS, '>', $mappedTrimmedReadsFilename unless ($noMappedFastq);
     open $UNMAPPED_TRIMMEDREADS, '>', $unmappedTrimmedReadsFilename unless ($noUnmappedFastq);
-    
+	my $readlist;
+
     # LOOP: Parse each SAM file (single-threaded)
     foreach(@samFiles) {
         my $SAMFILE;
@@ -2488,12 +2529,15 @@ sub parseSAM {
                 my $lengthMatch = $1;
                 $MAPPED_TRIMMEDREADS_CNT++;
 
-                # Mapping entry conforms
-                if($fields[2] =~ m/^(gi\|(\d+)\|\S+\|(\w+(?:\.\d+))\|(\d+)\|(\d+)\|)/) {
+				# Mapping entry conforms
+                if($fields[2] =~ m/^(gi\|(\d+)\|\S+\|(\w+(?:\.\d+))\|(\d+)\|(\d+)\|\d+\|)/) {
                 #if($fields[2] =~ m/^(gi\|(\d+)\|\S+\|\S+\|(\d+)\|(\d+)\|(\d+)\|)/) {         # <------ Req's all parsedDTAR.dmp files to be re-parsed & stored using --make_dmp and --db=<DBFILE>*
                     my $giFrag = $1;            # get GI fragment (subset of GI entries)
                     my $gi     = $2;            # get GI
                     my $rStart = $fields[3];    # pos in REF where mapping starts
+
+					$MAPPED_PLASMID_TRIMMEDREADS_CNT++ if $uniqueGIlengths->{$gi}->{PLASMID};
+					next LINE if $uniqueGIlengths->{$gi}->{PLASMID} && $noPlasmidHit;
 
                     ##################################################################################################
                     # In order to track the no. of unique full-length reads that mapped,
@@ -2553,9 +2597,20 @@ sub parseSAM {
                     #next LINE if(($rStop+1) > $uniqueGIlengths->{$gi}->{FRAG}->{$giFrag});
                 
                     # Index
-                    $gi2mapFrags{$gi}->{FRAG}->{$giFrag}->{$rStart}->{$rStop}++;    
+                    $gi2mapFrags{$gi}->{FRAG}->{$giFrag}->{$rStart}->{$rStop}++;
                     $gi2mapFrags{$gi}->{HITCOUNT}++;
+					$gi2mapFrags{$gi}->{HITCOUNT_P}||=0;
+                    $gi2mapFrags{$gi}->{HITCOUNT_P}++ if $uniqueGIlengths->{$gi}->{PLASMID};
                     $gi2mapFrags{$gi}->{TOTALBPMAPPED} += $lengthMatch;
+
+					# Recover original read name
+					if( $fields[0] =~ /^(.*)_\d\/?\d?$/ && !defined $readlist->{$1} ){
+						$gi2mapFrags{$gi}->{READCOUNT}||=0;
+						$gi2mapFrags{$gi}->{READCOUNT}++;
+						$MAPPED_RAWREADS_CNT++;
+						$MAPPED_PLASMID_RAWREADS_CNT++ if $uniqueGIlengths->{$gi}->{PLASMID};
+						$readlist->{$1} = 1;
+					}
 
                 } #FIELDS[2]
                 else {
@@ -2574,7 +2629,7 @@ sub parseSAM {
         } #LINE
         close $SAMFILE unless $SAMFILE_is_STDIN;
         my $iter1 = new Benchmark;
-        print "done. Mapped split-trimmed reads: $MAPPED_TRIMMEDREADS_CNT, Unmapped split-trimmed reads: $UNMAPPED_TRIMMEDREADS_CNT. ".timestr(timediff($iter1,$iter0))."\n";         # parsing SAM file
+        print "done. Mapped split-trimmed reads: $MAPPED_TRIMMEDREADS_CNT; Mapped split-trimmed reads to plasmids: $MAPPED_PLASMID_TRIMMEDREADS_CNT; Unmapped split-trimmed reads: $UNMAPPED_TRIMMEDREADS_CNT; Mapped raw reads: $MAPPED_RAWREADS_CNT; Mapped raw reads to plasmids: $MAPPED_PLASMID_RAWREADS_CNT. ".timestr(timediff($iter1,$iter0))."\n";         # parsing SAM file
     } #@samFiles
 
     close $MAPPED_TRIMMEDREADS unless ($noMappedFastq);
@@ -2594,6 +2649,7 @@ sub parseMultiFASTA {
     my %dup_header = ();              # Hash holding seqs with duplicate headers
     my %unique     = ();              # Hash holding seqs with unique headers
     my $header     = q{};             # Holds the header extracted from the regex
+    my $desc       = q{};             # Holds the description extracted from the regex
     my $header_already_found = 0;     # Flag; TRUE when the first header is found
     my $dup_header_found     = 0;     # Flad; Cycles 'TRUE' when dup header found
     #share(%unique);
@@ -2611,15 +2667,16 @@ sub parseMultiFASTA {
             # Does the line contain a FASTA header?
 #            if ($line =~ m/^>(\S+).*$/) {          # Line contains a FASTA header
 #            if ($line =~ m/^>(.+)\s.+$/) {         # Line contains a FASTA header
-            if ($line =~ m/^>(\S+)\s+.+$/) {        # Line contains a FASTA header
+            if ($line =~ m/^>(\S+)\s+(.+)$/) {        # Line contains a FASTA header
                 $header = $1;                     # ...store it
 #               	$header =~ s/\|/__/g;               # Need to remove the "|" character
 #                                                  # since it causes file access problems
 #                print "HEADER = $header"; <STDIN>;                                                  
+                $desc = $2;
 
                 # Has the header been encountered already?
                 if (exists $filehash{$header}) {  # Header is a duplicate
-                    $dup_header{$header} = q{};   # Save dup header;
+                    $dup_header{$header} = q{};    # Save dup header;
                                                   # Q:should q{} be used?
                     $dup_header_found = 1;        # ... remember that dup was found
                 } # EXISTS
@@ -2628,23 +2685,25 @@ sub parseMultiFASTA {
                     $header_already_found = 1;    # ... remember that header found
                     $unique{$header}      = q{};  # ... save unique
                     $dup_header_found     = 0;    # ... reset dup found to FALSE
-                } # ELSE
 
+					$unique{$header} = "p" if $desc =~ /plasmid/i;
+
+                } # ELSE    
             } # IF
-            elsif ($header_already_found) {         # Not a header, but one already found
-                if ($dup_header_found) {
-                    $line =~ m/^(\s*)(.*)$/;        # Capture the sequence info in $2
-                    $dup_header{$header} .= $2; # ...need whitespace
-                }
-                else {
-                    $line =~ m/^(\s*)(.*)$/;        # Capture the sequence info in $2
-                    $filehash{$header} .= $2;   # Append seq to hash; whitespace
-                    $unique{$header}   .= $2;   #   needed if module re-used for
-                                                    #   importing QUALITY values.
-                }
-            } # ELSIF
+#            elsif ($header_already_found) {         # Not a header, but one already found
+#                if ($dup_header_found) {
+#                    $line =~ m/^(\s*)(.*)$/;        # Capture the sequence info in $2
+#                    $dup_header{$header} .= $2; # ...need whitespace
+#                }
+#                else {
+#                    $line =~ m/^(\s*)(.*)$/;        # Capture the sequence info in $2
+#                    $filehash{$header} .= $2;   # Append seq to hash; whitespace
+#                    $unique{$header}   .= $2;   #   needed if module re-used for
+#                                                    #   importing QUALITY values.
+#                }
+#           } # ELSIF
             else {
-#                print "RUBBISH LINE\n";
+                 next;
             }
         } # IF
         else {
@@ -2763,11 +2822,12 @@ sub parseTrimStatsFiles {
     foreach my $trimStatsFile (@{ $_[0] }) {
         print "Parsing $trimStatsFile...";
         open my $INFILE, '<', $trimStatsFile;
+        my $foundRawReads = 0;
         my $foundReads = 0;
         my $foundBases = 0;
         while(my $line=<$INFILE>) {
-            if($line =~ m/\s+\# of Reads:\t\d+\t(\d+)/) {
-                $foundReads = $1;
+            if($line =~ m/\s+\# of Reads:\t(\d+)\t(\d+)/) {
+                ($foundRawReads, $foundReads) = ($1,$2);
             }
             elsif($line =~ m/\s+\# of Bases:\t\d+\t(\d+)/) {
                 $foundBases = $1;
@@ -2776,7 +2836,7 @@ sub parseTrimStatsFiles {
         close $INFILE;
         $inputReads += $foundReads;
         $inputBases += $foundBases;
-        print " found $foundReads reads and $foundBases bases.\n";
+        print " found $foundRawReads reads (split-trimmed: $foundReads) and $foundBases bases.\n";
     }
 
 }
@@ -3092,6 +3152,7 @@ GI => S => SS => G => F => O => C => P
                        LINLEN       => $giLinearLength,
                        COV          => $coverage,
                        HITCOUNT     => $hitCount,
+                       READCOUNT    => $readCount,
                        FULLREADHITS => $fullHitCount,
                        MAPPED       => $totalBPmapped,
                      },
@@ -3105,6 +3166,7 @@ GI => S => SS => G => F => O => C => P
                              LINLEN       => $strainLinearLength,
                              COV          => $coverage,
                              HITCOUNT     => $hitCount,
+                             READCOUNT    => $readCount,
                              FULLREADHITS => $fullHitCount,
                              MAPPED       => $totalBPmapped,
                              CHILDREN     => {
@@ -3123,6 +3185,7 @@ GI => S => SS => G => F => O => C => P
                              LINLEN       => $strainLinearLength,
                              COV          => $coverage,
                              HITCOUNT     => $hitCount,
+                             READCOUNT    => $readCount,
                              FULLREADHITS => $fullHitCount,
                              MAPPED       => $totalBPmapped,
                              GPROJ        => $numGenomeProjectsUnderSpecies,
@@ -3142,6 +3205,7 @@ GI => S => SS => G => F => O => C => P
                              LINLEN       => $genusLinearLength,
                              COV          => $coverage,
                              HITCOUNT     => $hitCount,
+                             READCOUNT    => $readCount,
                              FULLREADHITS => $fullHitCount,
                              MAPPED       => $totalBPmapped,
                              GPROJ        => $numGenomeProjectsUnderGenus,
