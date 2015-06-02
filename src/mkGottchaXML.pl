@@ -302,7 +302,7 @@ sub loadOrganismNames {
         #<STDIN>;
         my $dirname = $basename;
         $basename =~ tr/_/ /;                    # Remove underscores from name
-        if($basename =~ m/^(.+)\s+(uid\d+)/) {   # Remove the "uid###" from name
+        if($basename =~ m/^(.+)\s+uid\d+/ || $basename =~ m/^(.+)\s*$/ ) {   # Remove the "uid###" from name
             $basename = $1;
             
             $filehash{$_[1]}->{$validHeader}->{$rootdir}->{$dirname} = $basename;
@@ -614,6 +614,11 @@ sub parseHeader {
     my @contigNames  = ();
     my @contigDescriptions = ();
 
+	if( !-e $_[0] || !-s $_[0]){
+		print STDERR "WARNING: Invalid input file: $_[0]\n";
+		return;
+	}
+
     open my $INFILE, '<', $_[0] || die "Cannot open FASTA file $_[0]!\n";
     LINE: while(my $line=<$INFILE>) {
         chomp $line;
@@ -622,6 +627,7 @@ sub parseHeader {
         # ____________NAME____________ _______________DESCRIPTION_____________________
         # >gi|193001753|gb|CP001047.1| Mycoplasma arthritidis 158L3-1, complete genome
         if($line =~ m/^\>(gi\|(\d+)\|\S+\|\S+)\s+(.+)$/) {
+			print "ERROR: $1\n" unless $2;
             push(@contigNames, $1);
             push(@gis, $2);
             push(@contigDescriptions, $3);
@@ -787,7 +793,16 @@ sub matchOrgs2TaxTreeByGI {
         my $sType   = $taxTreeByGI{$gi}->{STYPE};           # GEN or GBK        or $_[0]->{VITALS}->{GI}->{$gi}->{SOURCE}   <--------- VERIFY THIS
         my $node    = $taxTreeByGI{$gi}->{NODE};            # node
         my $rank    = determineRank($_[0], $node, $orgName);# S or SS
-        
+       
+		# UPDATE: 2014-10-29
+		# each sequence should belong to a strain
+		#
+		if($rank ne "SS"){
+			$orgName = $allGIs{$gi}->{DESC};
+			$orgName =~ s/,[^,]+$//;
+			$rank = "SS";
+		}
+
         # Track for each reverse lookup in sub dereplicateOrgNames()
         $orgName2TaxData{$orgName}->{NODE} = $node;
         $orgName2TaxData{$orgName}->{RANK} = $rank;
@@ -1062,6 +1077,8 @@ sub dereplicateOrgNames {
         } #KINGDOM
     } #STATUS
 
+	my $custom_uid=0;
+
     NAME: foreach my $name (keys %sciNames) {
         next NAME unless $sciNames{$name}->{COUNT} > 1;
 
@@ -1078,7 +1095,8 @@ sub dereplicateOrgNames {
                             $uid = $1;
                         }
                         else {
-                            die "**FATAL**: Unrecognized directory name \"$dirname\"!\n";
+							$uid = "CUID".$custom_uid++;
+							#die "**FATAL**: Unrecognized directory name \"$dirname\"!\n";
                         }
 
                         # 1: Update $xmlTemplate

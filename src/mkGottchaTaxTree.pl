@@ -5,6 +5,10 @@
 #
 #
 #
+
+# 2014/10/28 Modified by Po-E (Paul) Li
+#  - Use one-level-lower taxonomy name as unassigned level name
+
 use strict;
 use warnings;
 use threads;
@@ -205,7 +209,10 @@ sub addVitals {
 
         $taxOptions->{VITALS} = \%vitals;
         addTaxID($taxOptions, $gi2taxidFile) if($taxOptions->{GI2TAXIDFILE});  # Parse gi_taxid_nucl.dmp for TAXIDs <--- THREAD
-        dump2disk($taxOptions->{VITALS}, $prefix.".dmp",          "Vitals", "bin");
+		changeOrgToSciName($taxOptions) if($taxOptions->{GI2TAXIDFILE});  # replace GBK organism to scientific name
+		customStrainNameForSpeciesOrg($taxOptions);
+		buildVitalOrgRepl($taxOptions);
+		dump2disk($taxOptions->{VITALS}, $prefix.".dmp",          "Vitals", "bin");
         dump2disk($taxOptions->{VITALS}, $prefix.".readable.dmp", "Vitals", "ascii");
     }
     
@@ -423,7 +430,7 @@ sub reorganizeTree {
     #   Verify that each ancestor in the parentTrace is in %taxAbbr, else do not add to speciesTree
     #   Add speciesNode to speciesTree
 
-    print "-> Reconstructing the SPECIES Taxonomic Tree...";
+	print "-> Reconstructing the SPECIES Taxonomic Tree...";
     #my %speciesTree = ();
     my %speciesTree :shared = ();
     $iter1 = new Benchmark;
@@ -436,7 +443,6 @@ sub reorganizeTree {
 
         # Get the species' parent trace
         my @ancestors = @{ $_[0]->{PTRACE}->{$speciesNode} };
-        
         # Loop through the ancestral nodes, saving any that have a valid rank
         foreach my $ancestor (@ancestors) {
             my $ancestorRank = $_[0]->{NODEHASH}->{$ancestor}->{RANK};
@@ -459,13 +465,40 @@ sub reorganizeTree {
                 delete $validRanks{ $ancestorRank };  
             }
         } #ancestor
-        
+       
         # Any remaining ranks in %validRanks went undiscovered, and are labeled as "Unassigned"
         my @missingRanks = keys %validRanks;
         if(@missingRanks) {
+			my %rank_oneLvlDown = (
+				"S" => "SS",
+				"G" => "S",
+				"F" => "G",
+				"O" => "F",
+				"C" => "O",
+				"P" => "C"
+			);
+			my %tax_fulfilling_order = (
+				"species" => 1,
+				"genus"   => 2,
+				"family"  => 3,
+				"order"   => 4,
+				"class"   => 5,
+				"phylum"  => 6,
+				"superkingdom"  => 7
+			);
             $speciesTree{$speciesNode} = &share({}) unless (exists $speciesTree{$speciesNode});
-            $speciesTree{$speciesNode}->{ $taxAbbr{$_} } = "Unassigned" foreach (@missingRanks);
-        } #missingRanks
+
+			# UPDATE: 2014-10-28
+			# Appending one-level-lower taxonomy name to unassigned level name
+
+			my $speSciName = getSciName("genus",$_[0]->{NAMEHASH}->{$speciesNode});
+
+			foreach my $rank ( sort {$tax_fulfilling_order{$a}<=>$tax_fulfilling_order{$b}} @missingRanks ){
+				last if $rank eq "superkingdom";
+				my $usename = $rank eq "genus" ? $speSciName : $speciesTree{$speciesNode}->{ $rank_oneLvlDown{$taxAbbr{$rank}} };
+            	$speciesTree{$speciesNode}->{ $taxAbbr{$rank} } = "Unassigned $rank - $usename";
+			}
+		} #missingRanks
 
         # Incrementally add the SPECIES names to SPECIES TREE
         $speciesTree{$speciesNode}->{ $taxAbbrExt{"species"} } = &share({}) 
@@ -672,12 +705,14 @@ sub parseGBK {
     $giVitals{REPL} = &share({});
     $giVitals{ACC}  = &share({});        
     print "-> Parsing Genbank files for vital data (each \'.\' = $lineBuffer records)";
-    
+  
     # Parse *.gbk files for required info
     #foreach my $gbk (@{ $_[0] }) {
     for my $idx (0..(scalar(@{ $_[0]})-1)) {
         my $gbk = $_[0]->[$idx];
         # 1. open file
+		#
+		die "Genbank file \"$gbk\" is empty.\n" unless -s $gbk;
         open my $GBK, '<', $gbk || die "Cannot open Genbank file \"$gbk\" for read. Abort.\n";
         my $size     = q{}; 
         my $nType    = q{};
@@ -691,6 +726,7 @@ sub parseGBK {
         my $stopDef  = 0;
         my $orgFound = 0;
         my $stopOrg  = 0;
+
         LINE: while(my $line=<$GBK>) {
             chomp $line;
             # 2. skip until ^LOCUS; parse
@@ -760,8 +796,6 @@ sub parseGBK {
         #    print "\nORG=\"$org\"";
         #    <STDIN>;
         #}
-
-
             
         $repl =~ s/\.$//;                               # Remove tailing periods
         $giVitals{GI}->{$gi} = &share({}) unless (exists $giVitals{GI}->{$gi});
@@ -774,38 +808,38 @@ sub parseGBK {
         $giVitals{GI}->{$gi}->{SIZE}    = $size;        # Length of genome
         $giVitals{GI}->{$gi}->{SOURCE}  = $_[1];        # GBK or GEN
         
-        # $_[1] = GEN or GBK
-        $giVitals{ORG}->{$org}                                   = &share({}) 
-            unless (exists $giVitals{ORG}->{$org});
-        $giVitals{ORG}->{$org}->{REPL}                           = &share({}) 
-            unless (exists $giVitals{ORG}->{$org}->{REPL});
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}                  = &share({}) 
-            unless (exists $giVitals{ORG}->{$org}->{REPL}->{$repl});
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}         = &share({}) 
-            unless (exists $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]});
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}  = &share({}) 
-            unless (exists $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi});
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{SIZE} = $size;
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{DATE} = $date;
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{NTYPE}= $nType;
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{TOPO} = $topology;
-        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{ACC}  = $acc;
-        #$giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{GI}->{$gi} = ();
-
-
-        $giVitals{REPL}->{$repl}                        = &share({}) 
-            unless (exists $giVitals{REPL}->{$repl});
-        $giVitals{REPL}->{$repl}->{$_[1]}               = &share({}) 
-            unless (exists $giVitals{REPL}->{$repl}->{$_[1]});
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}        = &share({}) 
-            unless (exists $giVitals{REPL}->{$repl}->{$_[1]}->{$gi});
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{ORG}  = $org;
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{SIZE} = $size;
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{DATE} = $date;
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{NTYPE}= $nType;
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{TOPO} = $topology;
-        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{ACC}  = $acc;
-        #$giVitals{REPL}->{$repl}->{$_[1]}->{GI}->{$gi} = ();
+#        # $_[1] = GEN or GBK
+#        $giVitals{ORG}->{$org}                                   = &share({}) 
+#            unless (exists $giVitals{ORG}->{$org});
+#        $giVitals{ORG}->{$org}->{REPL}                           = &share({}) 
+#            unless (exists $giVitals{ORG}->{$org}->{REPL});
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}                  = &share({}) 
+#            unless (exists $giVitals{ORG}->{$org}->{REPL}->{$repl});
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}         = &share({}) 
+#            unless (exists $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]});
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}  = &share({}) 
+#            unless (exists $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi});
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{SIZE} = $size;
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{DATE} = $date;
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{NTYPE}= $nType;
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{TOPO} = $topology;
+#        $giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{$gi}->{ACC}  = $acc;
+#        #$giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{GI}->{$gi} = ();
+#
+#
+#        $giVitals{REPL}->{$repl}                        = &share({}) 
+#            unless (exists $giVitals{REPL}->{$repl});
+#        $giVitals{REPL}->{$repl}->{$_[1]}               = &share({}) 
+#            unless (exists $giVitals{REPL}->{$repl}->{$_[1]});
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}        = &share({}) 
+#            unless (exists $giVitals{REPL}->{$repl}->{$_[1]}->{$gi});
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{ORG}  = $org;
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{SIZE} = $size;
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{DATE} = $date;
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{NTYPE}= $nType;
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{TOPO} = $topology;
+#        $giVitals{REPL}->{$repl}->{$_[1]}->{$gi}->{ACC}  = $acc;
+#        #$giVitals{REPL}->{$repl}->{$_[1]}->{GI}->{$gi} = ();
 
         $giVitals{ACC}->{$acc} = $gi;
         print "." if($idx % $lineBuffer == 0);
@@ -1087,16 +1121,16 @@ sub addTaxID {
     $iterX = new Benchmark;
     foreach my $gi (keys %{ $_[0]->{VITALS}->{GI} }) {
         my $taxid = q{};
-        $taxid = $_[0]->{VITALS}->{GI}->{$gi}->{TAXID} 
-            if(exists $_[0]->{VITALS}->{GI}->{$gi}->{TAXID});
+        $taxid = $_[0]->{VITALS}->{GI}->{$gi}->{TAXID} if(exists $_[0]->{VITALS}->{GI}->{$gi}->{TAXID});
 
         if(!$taxid) {
-            print "\n    **Warning: GI \"$gi\" has no TAXID!**";
-            $taxid = "0";
+            print "\n    **Warning: GI \"$gi\" has no TAXID! Skipping this GI!**";
+            delete $_[0]->{VITALS}->{GI}->{$gi};
         }
-        $_[0]->{VITALS}->{TAXID}->{$taxid}        = &share({}) unless (exists $_[0]->{VITALS}->{TAXID}->{$taxid});
-        $_[0]->{VITALS}->{TAXID}->{$taxid}->{$gi} = ();
-
+		else{
+        	$_[0]->{VITALS}->{TAXID}->{$taxid}        = &share({}) unless (exists $_[0]->{VITALS}->{TAXID}->{$taxid});
+        	$_[0]->{VITALS}->{TAXID}->{$taxid}->{$gi} = ();
+		}
     } #gi
     $iterY = new Benchmark;
     print "\n    done. ".timestr(timediff($iterY,$iterX))."\n";
@@ -1491,6 +1525,84 @@ sub pad_zeroes {
   return $num;
 }
 ################################################################################
+sub changeOrgToSciName {
+	foreach my $gi ( keys %{$_[0]->{VITALS}->{GI}} ) {
+		my $taxid = $_[0]->{VITALS}->{GI}->{$gi}->{TAXID};
+		if($taxid){
+			my $sciname = getSciName( "genus", $_[0]->{NAMEHASH}->{$taxid}); # use "genus" to pass check
+			$_[0]->{VITALS}->{GI}->{$gi}->{ORG} = $sciname if $sciname;
+		}
+		else{
+			delete $_[0]->{VITALS}->{GI}->{$gi};
+		}
+	}
+}
+
+sub customStrainNameForSpeciesOrg {
+	foreach my $gi ( keys %{$_[0]->{VITALS}->{GI}} ) {
+		my $taxid = $_[0]->{VITALS}->{GI}->{$gi}->{TAXID};
+		my $rank  = $_[0]->{NODEHASH}->{$taxid}->{RANK};
+		if( $rank ne "no rank" && $rank ne "subspecies" ){
+			my $sciname = $_[0]->{VITALS}->{GI}->{$gi}->{REPL};
+			$sciname =~ s/,[^,]+$//;
+			unless ( exists $_[0]->{SPECIESTREE}->{$taxid} ){
+				print "WARNING: Skipped taxid: $taxid. Taxonomy speciestree not found.\n";
+				next;
+			}
+			$_[0]->{SPECIESTREE}->{$taxid}->{SS} = &share({}) unless (exists $_[0]->{SPECIESTREE}->{$taxid}->{SS} );
+			$_[0]->{SPECIESTREE}->{$taxid}->{SS}->{$sciname} = "scientific name - custom";
+			$_[0]->{VITALS}->{GI}->{$gi}->{ORG} = $sciname;
+		}
+	}
+}
+
+sub buildVitalOrgRepl {
+	foreach my $gi ( keys %{$_[0]->{VITALS}->{GI}} ) {
+		my $org   = $_[0]->{VITALS}->{GI}->{$gi}->{ORG};
+		my $src   = $_[0]->{VITALS}->{GI}->{$gi}->{SOURCE};
+		my $repl  = $_[0]->{VITALS}->{GI}->{$gi}->{REPL};
+		my $size  = $_[0]->{VITALS}->{GI}->{$gi}->{SIZE};
+		my $date  = $_[0]->{VITALS}->{GI}->{$gi}->{DATE};
+		my $nType = $_[0]->{VITALS}->{GI}->{$gi}->{NTYPE};
+		my $topo  = $_[0]->{VITALS}->{GI}->{$gi}->{TOPO};
+		my $acc   = $_[0]->{VITALS}->{GI}->{$gi}->{ACC};
+
+		my $giVitals = $_[0]->{VITALS};
+
+		$giVitals->{ORG}->{$org}                                         = &share({})
+			unless (exists $giVitals->{ORG}->{$org});
+		$giVitals->{ORG}->{$org}->{REPL}                                 = &share({})
+			unless (exists $giVitals->{ORG}->{$org}->{REPL});
+		$giVitals->{ORG}->{$org}->{REPL}->{$repl}                        = &share({})
+			unless (exists $giVitals->{ORG}->{$org}->{REPL}->{$repl}); 
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}                = &share({})
+			unless (exists $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src});
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi}         = &share({})
+			unless (exists $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi});
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi}->{SIZE} = $size;
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi}->{DATE} = $date;
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi}->{NTYPE}= $nType;
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi}->{TOPO} = $topo;
+        $giVitals->{ORG}->{$org}->{REPL}->{$repl}->{$src}->{$gi}->{ACC}  = $acc;
+        #$giVitals{ORG}->{$org}->{REPL}->{$repl}->{$_[1]}->{GI}->{$gi} = ();
+
+		$giVitals->{REPL}->{$repl}                        = &share({})
+			unless (exists $giVitals->{REPL}->{$repl});
+        $giVitals->{REPL}->{$repl}->{$src}                = &share({})
+			unless (exists $giVitals->{REPL}->{$repl}->{$src});
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}         = &share({})
+			unless (exists $giVitals->{REPL}->{$repl}->{$src}->{$gi});
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}->{ORG}  = $org;
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}->{SIZE} = $size;
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}->{DATE} = $date;
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}->{NTYPE}= $nType;
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}->{TOPO} = $topo;
+        $giVitals->{REPL}->{$repl}->{$src}->{$gi}->{ACC}  = $acc;
+        #$giVitals{REPL}->{$repl}->{$_[1]}->{GI}->{$gi} = ();
+	}
+}
+
+
 #-------------------------------------------------------------------------------
 sub usage {
     print <<END;
