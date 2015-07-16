@@ -38,8 +38,8 @@ in the "test" directory. More details are stated in the INSTRUCTION section.
 
 3. Downloading lookup table and species-level database from our web server:
  
-        $ wget https://greenhouse.lanl.gov/gottcha/GOTTCHA_lookup.tar.gz
-        $ wget https://greenhouse.lanl.gov/gottcha/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz
+        $ wget ftp://ftp.lanl.gov/public/genome/gottcha/GOTTCHA_lookup.tar.gz
+        $ wget ftp://ftp.lanl.gov/public/genome/gottcha/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz
    
    If you have any difficulty obtaining the databases, please contact Po-E Li <po-e@lanl.gov>.
 
@@ -113,9 +113,9 @@ species-level signature database that was produced by eliminating shared 24-mer 
 3514 bacterial replicons (c3514; includes both chromosomes and plasmids) and 3 human genomes (xHuman3X), 
 while retaining a minimum of 24bp of unique fragments (u24).
 
-The compressed database archives are available for users to download from our web server:
+The compressed database archives are available for users to download from our ftp server:
  
- > https://greenhouse.lanl.gov/gottcha/
+ > ftp://ftp.lanl.gov/public/genome/gottcha/
 
 GOTTCHA requires a taxanomic lookup table (GOTTCHA_lookup.tar.gz) and a pre-computed
 database (e.g: GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz) to classify reads.
@@ -124,8 +124,8 @@ corresponding *.md5 file for verification.
 
 You can use the 'wget' command to download both archives, one at a time:
 
-        $ wget https://greenhouse.lanl.gov/gottcha/GOTTCHA_lookup.tar.gz
-		$ wget https://greenhouse.lanl.gov/gottcha/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz
+        $ wget ftp://ftp.lanl.gov/public/genome/gottcha/GOTTCHA_lookup.tar.gz
+        $ wget ftp://ftp.lanl.gov/public/genome/gottcha/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.tar.gz
 
 Then use 'tar' to unpack and decompress both archives:
 
@@ -142,7 +142,7 @@ Files will be expanded to ./database directory by default.
  > replace the old one. The general location of file is "gottcha/parsed_database_only/<DATABASE_NAME>.parsedGOTTCHA.dmp.gz". For
  > example, to download the new dmp file for species level database:
  >
- >      $ wget https://greenhouse.lanl.gov/gottcha/parsed_database_only/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.parsedGOTTCHA.dmp.gz
+ >      $ wget ftp://ftp.lanl.gov/public/genome/gottcha/parsed_database_only/GOTTCHA_BACTERIA_c3514_k24_u24_xHUMAN3x.species.parsedGOTTCHA.dmp.gz
  > 
 
 Here is a list of the available pre-computed databases. Note that these databases are
