@@ -112,8 +112,8 @@ else
   chmod a+x ext/bin/cpanm;
 fi
 ( set -xe;
-  perl -Mthreads -e 1 > /dev/null 2>&1            || cpanm -v --notest -l ext threads;
-  perl -Mthreads::shared -e 1 > /dev/null 2>&1    || cpanm -v --notest -l ext threads::shared;
+#  perl -Mthreads -e 1 > /dev/null 2>&1            || cpanm -v --notest -l ext threads;
+#  perl -Mthreads::shared -e 1 > /dev/null 2>&1    || cpanm -v --notest -l ext threads::shared;
   perl -MGetopt::Long -e 1 > /dev/null 2>&1       || cpanm -v --notest -l ext Getopt::Long;
   perl -MBenchmark -e 1 > /dev/null 2>&1          || cpanm -v --notest -l ext Benchmark;
   perl -MTime::HiRes -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext Time::HiRes;
@@ -123,16 +123,16 @@ fi
   perl -MIO::Handle -e 1 > /dev/null 2>&1         || cpanm -v --notest -l ext IO::Handle;
   perl -MYAML::XS -e 1 > /dev/null 2>&1           || cpanm -v --notest -l ext YAML::XS;
   perl -MYAML -e 1 > /dev/null 2>&1               || cpanm -v --notest -l ext YAML;
-  perl -MXML::Simple -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext XML::Simple;
+#  perl -MXML::Simple -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext XML::Simple;
   perl -MStorable -e 1 > /dev/null 2>&1           || cpanm -v --notest -l ext Storable;
-  perl -MStatistics::Descriptive -e 1 > /dev/null 2>&1 || cpanm -v --notest -l ext Statistics::Descriptive;
+#  perl -MStatistics::Descriptive -e 1 > /dev/null 2>&1 || cpanm -v --notest -l ext Statistics::Descriptive;
   perl -MTie::IxHash -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext Tie::IxHash;
-  perl -MAlgorithm::Combinatorics -e 1 > /dev/null 2>&1 || cpanm -v --notest -l ext Algorithm::Combinatorics;
-  perl -MDevel::Size -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext Devel::Size;
-  perl -MSort::Key::Radix -e 1 > /dev/null 2>&1   || cpanm -v --notest -l ext Sort::Key::Radix;
-  perl -MSort::Key -e 1 > /dev/null 2>&1          || cpanm -v --notest -l ext Sort::Key;
-  perl -MBit::Vector -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext Bit::Vector;
-  #perl -M"feature 'switch'" -e 1 > /dev/null 2>&1 || cpanm -v --notest -l ext feature;
+#  perl -MAlgorithm::Combinatorics -e 1 > /dev/null 2>&1 || cpanm -v --notest -l ext Algorithm::Combinatorics;
+#  perl -MDevel::Size -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext Devel::Size;
+#  perl -MSort::Key::Radix -e 1 > /dev/null 2>&1   || cpanm -v --notest -l ext Sort::Key::Radix;
+#  perl -MSort::Key -e 1 > /dev/null 2>&1          || cpanm -v --notest -l ext Sort::Key;
+#  perl -MBit::Vector -e 1 > /dev/null 2>&1        || cpanm -v --notest -l ext Bit::Vector;
+# perl -M"feature 'switch'" -e 1 > /dev/null 2>&1 || cpanm -v --notest -l ext feature;
 )
 done_message "Done installing Perl dependencies." "Failed installing Perl dependencies.";
 
@@ -148,14 +148,9 @@ echo "
                  GOTTCHA installed successfully.
 ================================================================================
 
-The pre-computed bacterial and viral GOTTCHA databases are available at our SFTP
-server. If you want to create your own GOTTCHA signatue database, the detail
-instruction can be found in README_FULL.txt file.
-
-    SFTP server: img-gp.lanl.gov 
-    Port: 33001 
-    username: gottcha 
-    password: 9001gottcha
+The pre-computed bacterial and viral GOTTCHA databases are available at our ftp
+server:
+    ftp://ftp.lanl.gov/public/genome/gottcha/
 
 Quick start:
     bin/gottcha.pl -i <FASTQ> -d <DATABASE>
