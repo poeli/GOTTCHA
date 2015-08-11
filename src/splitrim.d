@@ -1,11 +1,11 @@
-/* 
+/*
 
         Last working version: v1j3e5
 
         BUGS:
         (1) readCounter in trimEntry() is not working (see first 2 fragments in: /home/traceyf/chienchi/working/largeTestset_noEmptyLines.fastq)
 
-        // TO DO: 
+        // TO DO:
         (1) Read in up to 16 entries (64 lines) or more per thread, and THEN process, rather than one entry (4 lines) at a time.
         (2) Stagger the writes for each thread so they don't naturally overlap
         (3) Use lustre's "lctl" command to spread a FASTQ file across X inodes
@@ -19,28 +19,28 @@
         Fixed ASCII transcoding error where an extra element in the array was output along with the quality line
 
         2013-03-07:
-        Added fixed-length read trimming (after quality trimming) with the "--recycle" option. 
+        Added fixed-length read trimming (after quality trimming) with the "--recycle" option.
 
         2013-03-19:
         Fixed an off-by-one error in the rawSeqNum count displayed in the stats file.
-        
-                
-        Example (50-bp read):                   
+
+
+        Example (50-bp read):
             Original read                       =================================N================      50-bp
             Splitrimmed read (N's)              ==================33=============|=======16=======      33-bp, 16-bp
             Splitrimmed read (Quals)            ==============28============|==4=|=======16=======      28-bp,  4-bp, 16-bp
-            
+
             ========
             Option 1: minL=10 (keeps 2 frags)   ==============28============      =======16=======      28-bp, 16-bp
             ========
               (keeps 2 frags, 44-bp)
-              
+
             ========
             Option 2: fixL=10                   ====10====                        ====10====            10-bp, 10-bp, 10-bp
             ========                                      ====10====                        XXXXXX
               (keeps 3 frags, 30-bp)                                XXXXXXXX
-            
-            ========                       
+
+            ========
             Option 3: fixL=10 --recycle         ====10====                        =======16=======      10-bp, 18-bp, 16-bp
             ========                                      ========18========
               (keeps 3 frags, 44-bp)
@@ -51,14 +51,14 @@
         The trim START:STOP positions were moved from the end of the header, as in
                                                                 ****
             @HISEQ:148:C0F5FACXX:1:1307:2735:88518 1:N:0:CGATGT 1:30
-        
+
         and appended to the header name just before the first whitespace so that they will show up in SAM files, as in
                                                    ****
             @HISEQ:148:C0F5FACXX:1:1307:2735:88518:1:30 1:N:0:CGATGT
 
         This will facilitate tracking of (1) the hit count in terms of the actual full-length reads, and (2) the average fraction
         of a read that does map. The latter would be calculated as follows:
-        
+
         ///////////////////////////////////////////////////////////////////////////////////////////////////
         //                                                                                               //
         //  Average Frac. of Read Mapping = { SUM_i=1|N [(# bases mapped)i/(# bases available)i] } / N   //
@@ -71,10 +71,10 @@
         //        (# bases available)i = no. of bases in i that passed the trimming step                 //
         //                                                                                               //
         ///////////////////////////////////////////////////////////////////////////////////////////////////
-        
+
         2013-04-04:
-        Reverted the positions of the trim START:STOP positions to the very end of the header line. 
-        
+        Reverted the positions of the trim START:STOP positions to the very end of the header line.
+
         All FASTQ reads are converted to the OLD Illumina format, where "/1" or "/2" is appended to the header line
         just before the first whitespace. Since only single-end reads are considered here, only "/1" is used.
         -> Uniqueness of each fragment derived from a single, full-length read, is enforced by prepending a "_" and
@@ -83,7 +83,7 @@
             @HISEQ:148:C0F5FACXX:1:1307:2735:88518:1:30 1:N:0:CGATGT
         to  @HISEQ:148:C0F5FACXX:1:1307:2735:88518 1:N:0:CGATGT 1:30
         to  @HISEQ:148:C0F5FACXX:1:1307:2735:88518/1 1:N:0:CGATGT 1:30
-        
+
         But in a SAM file, the first whitespace-delimited header string is indistinguishable from
             @HISEQ:148:C0F5FACXX:1:1307:2735:88518/1 1:N:0:CGATGT 31:60
 
@@ -92,7 +92,7 @@
             @HISEQ:148:C0F5FACXX:1:1307:2735:88518_0/1 1:N:0:CGATGT 1:30
             @HISEQ:148:C0F5FACXX:1:1307:2735:88518_1/1 1:N:0:CGATGT 31:60
 
-        
+
 
         TO DO:
         =====
@@ -138,7 +138,7 @@ struct inputOptions {
     ushort             userMinL;                // min. length filter
     ushort             userFixL;                // fixed length filter
     bool               recycle;                 // true or false
-    uint               threads;       
+    uint               threads;
     ushort             baseLength;              // the non-zero contents of either userMinL or userFixL
     ubyte              userMinQ;                // min. quality fileter
     ushort             userMaxN;                // min. count filter
@@ -230,29 +230,29 @@ void verifyFastqFormat(std.stdio.File IN, ref bool newIlluminaFormat) {
             if(line[0] == '@') {    // valid header line
                 auto m = match(line, ctr);              // Old Illumina formats terminate their
                 string header = m.captures[1];          // headers with either a /1 or /2 for
-                                                        // paired-end reads, while single-end 
+                                                        // paired-end reads, while single-end
                                                         // reads terminate with /1
                 if(header == "") {  // NEW Illumina format
                     newIlluminaFormat = true;
                 }
             }
             else {                  // invalid
-                writeln("*FATAL*: Unrecognized FASTQ format!"); 
+                writeln("*FATAL*: Unrecognized FASTQ format!");
                 exit(1);
             }
-            
+
         }
         if(lineCount == 2) {                            // 2nd valid line better be DNA!
             foreach(base; line) {
                 //writeln("Base: ", base);
                 if(base !in stdNucleotides) {
-                    writeln("*FATAL*: Unrecognized FASTQ format!"); 
+                    writeln("*FATAL*: Unrecognized FASTQ format!");
                     exit(1);
                 }
             }
         }
         if((lineCount == 3) && (line[0] != '+')) {      // 3rd valid line should start with "+"
-            writeln("*FATAL*: Unrecognized FASTQ format!"); 
+            writeln("*FATAL*: Unrecognized FASTQ format!");
             exit(1);
         }
         if(lineCount == 4) {                            // 4th line is the quality line
@@ -278,7 +278,7 @@ bool calcStats(ref seqLenStats myStats, ref ulong[ushort] trimSeqLenHash) {
     //foreach(readLen; sort!((a,b) {return a > b; }) (trimSeqLenHash.keys)) {
     //    writeln(readLen," => ", trimSeqLenHash[readLen]);
     //}
-    
+
     //auto max = trimSeqLenArray[$-1];
     //auto min = trimSeqLenArray[0];
 
@@ -287,18 +287,18 @@ bool calcStats(ref seqLenStats myStats, ref ulong[ushort] trimSeqLenHash) {
     //    median = trimSeqLenArray[cast(ulong)(trimSeqLenArray.length/2)];
     //}
     //else {
-    //    median = (trimSeqLenArray[trimSeqLenArray.length/2] 
+    //    median = (trimSeqLenArray[trimSeqLenArray.length/2]
     //           +  trimSeqLenArray[trimSeqLenArray.length/2 - 1]) / 2;
     //}
 
     // Step1: Find mean
     ulong total1   = 0;
     ulong numElems = 0;
-    foreach(ushort len; trimSeqLenHash.keys) { 
+    foreach(ushort len; trimSeqLenHash.keys) {
         total1 += len*trimSeqLenHash[len];
         numElems += trimSeqLenHash[len];
     }
-    
+
     // EDIT
     //double mean1 = total1/trimSeqLenArray.length;
     double mean1 = total1/numElems;
@@ -337,7 +337,7 @@ void processOptions1(ref inputOptions inOpts) {
         writeln("*FATAL*: Input FASTQ file \"",inOpts.inFastq,"\" does not exist!");
         exit(0);
     }
-    
+
     // Input file is a file?
     if(!inOpts.inFastq.isFile) {
         writeln("*FATAL*: Input file \"",inOpts.inFastq,"\" is not a file");
@@ -367,7 +367,7 @@ void processOptions1(ref inputOptions inOpts) {
         if(inOpts.verbose) writeln("successfully created.");
 
     }
-    
+
     if(!inOpts.outPath.isDir) {
         writeln("*FATAL*: Output path \"",inOpts.outPath,"\" is not a directory.");
         exit(0);
@@ -382,12 +382,12 @@ void processOptions1(ref inputOptions inOpts) {
         writeln("Please specify only one of \"--minL\" or \"--fixL\". Abort.");
         exit(0);
     }
-    
+
     if(inOpts.threads < 1) {
         writeln("*FATAL*: Thread count [",inOpts.threads,"] must be >= 1. Abort.");
         exit(0);
     }
-   
+
 }
 /**********************************************************************/
 void processOptions2(inputOptions inOpts) {
@@ -400,45 +400,45 @@ void processOptions2(inputOptions inOpts) {
     enforce((inOpts.sortLenAsc & inOpts.sortLenDesc) == false,            "Cannot specify both --sortLenAsc and --sortLenDesc");
     enforce(((inOpts.minAveQ > 0) && (inOpts.minAveQ <= qBest)),          "Minimum average read quality is out of range");
     if(
-          (inOpts.userMinL  > 0) 
-       && (inOpts.userFixL == 0) 
+          (inOpts.userMinL  > 0)
+       && (inOpts.userFixL == 0)
        && (inOpts.recycle)
-      ) 
+      )
     writeln("Note: Option \"--recycle\" is meaningless when \"--minL\" is specified. Use \"--fixL\" instead. Ignoring...\n");
 
 }
 /**********************************************************************/
-void initFiles(ref inputOptions inOpts, ref std.stdio.File IN, 
-               ref std.stdio.File OUT,  ref std.stdio.File STATS, 
+void initFiles(ref inputOptions inOpts, ref std.stdio.File IN,
+               ref std.stdio.File OUT,  ref std.stdio.File STATS,
                ref std.stdio.File HISTO) {
 
     debug writeln("outStatsFilename=",inOpts.outStatsFilename);
     debug writeln("outHistoFilename=",inOpts.outHistoFilename);
 
-    IN     = std.stdio.File(inOpts.inFastq, "r"); 
+    IN     = std.stdio.File(inOpts.inFastq, "r");
     OUT    = std.stdio.File(inOpts.outFastq, "w");
     STATS  = std.stdio.File(inOpts.outStatsFilename, "w");
     HISTO  = std.stdio.File(inOpts.outHistoFilename, "w");
     //GC  = std.stdio.File(inOpts.outGCFilename, "w");
-    
+
 }
 /**********************************************************************/
 void verifyAsciiEncoding(ref inputOptions inOpts, string q) {
-    
+
     // swap encoding if wrong encoding
     bool wrongEncoding = false;
     QUAL: foreach(qual; q) {
-    
+
         //write(qual,"=",cast(int)qual," - 64 =",cast(int)qual-64,"/ ");
-    
+
         // True encoding is 33 if this is negative
         if((cast(int)qual - 64) < 0) {
             // It's 33, but given encoding is 64; swap
-            if (inOpts.asciiEncoding == 64) { 
+            if (inOpts.asciiEncoding == 64) {
                 debug writeln("Wrong encoding (64). Switching to 33!");
-                wrongEncoding = true; 
+                wrongEncoding = true;
                 inOpts.asciiEncoding = 33;
-                break QUAL; 
+                break QUAL;
             }
             else {
                 debug writeln("Encoding is 33...");
@@ -458,10 +458,10 @@ void verifyAsciiEncoding(ref inputOptions inOpts, string q) {
                 break QUAL;
             }
         }
-        
+
     }
-    
-    if((inOpts.asciiEncoding == 33) && (inOpts.outEncoding == 64)) 
+
+    if((inOpts.asciiEncoding == 33) && (inOpts.outEncoding == 64))
         inOpts.outOffset = (64-33);
     else if((inOpts.asciiEncoding == 64) && (inOpts.outEncoding == 33))
         inOpts.outOffset = -(64-33);
@@ -476,19 +476,19 @@ void writeHistoFile(std.stdio.File HISTO, in inputOptions inOpts) {
     if(inOpts.sortLenAsc) {
         // sort ascending
         foreach(len; sort!((a,b) { return b > a; }) (inOpts.trimSeqLenHash.keys))
-            HISTO.writeln(len,"\t",inOpts.trimSeqLenHash[len]);    
+            HISTO.writeln(len,"\t",inOpts.trimSeqLenHash[len]);
         return;
     }
 
     if(inOpts.sortLenDesc) {
         // sort descending
         foreach(len; sort!((a,b) { return a > b; }) (inOpts.trimSeqLenHash.keys))
-            HISTO.writeln(len,"\t",inOpts.trimSeqLenHash[len]);    
+            HISTO.writeln(len,"\t",inOpts.trimSeqLenHash[len]);
         return;
     }
-    
+
     // unsorted
-    foreach(len, freq; inOpts.trimSeqLenHash) 
+    foreach(len, freq; inOpts.trimSeqLenHash)
         HISTO.writeln(len,"\t",freq);
 
 }
@@ -512,7 +512,7 @@ void writeStatsFile(std.stdio.File STATS,       in inputOptions inOpts,
     STATS.write  ("      # of Bases:\t",inOpts.totalRawSeqLen,"\t",inOpts.totalTrimSeqLen,"\t(");
     STATS.writef ("%.2f", cast(double)inOpts.totalTrimSeqLen/inOpts.totalRawSeqLen*100);
     STATS.writeln(" %)");
-    
+
     STATS.write  ("Mean Read Length:\t");
     double rawMeanReadLen = cast(double) inOpts.totalRawSeqLen/inOpts.rawSeqNum;
     STATS.writef ("%.2f", rawMeanReadLen);
@@ -544,7 +544,7 @@ void writeStatsFile(std.stdio.File STATS,       in inputOptions inOpts,
     STATS.write(   "Total bases:\t",totalTrimSeqLen,"\t(");
     STATS.writef(  "%.2f", cast(float)totalTrimSeqLen/totalRawSeqLen*100);
     STATS.writeln( "%)");
-    
+
     STATS.write(   "Mean Read Length:\t");
     if(trimSeqNum > 0) {
         STATS.writef(  "%.2f", myStats.trimAvg);
@@ -554,7 +554,7 @@ void writeStatsFile(std.stdio.File STATS,       in inputOptions inOpts,
     else {
         STATS.writeln("0.00");
     }
-    
+
     // Edit:
     STATS.writeln();
     STATS.writeln("Total Trim Time (ms):\t", programTime);
@@ -562,18 +562,18 @@ void writeStatsFile(std.stdio.File STATS,       in inputOptions inOpts,
 
 
 /*  Perl Equiv:
-    
+
     if (@paired_files){
       printf $fh ("  Paired Reads #:\t\%d (%.2f %%)\n",$paired_seq_num, $paired_seq_num/$trimmed_num*100);
       printf $fh ("  Paired total bases:\t\%d (%.2f %%)\n",$total_paired_bases,$total_paired_bases/$total_trimmed_seq_len*100);
       printf $fh ("  Unpaired Reads #:\t\%d (%.2f %%)\n", $trimmed_num - $paired_seq_num, ($trimmed_num - $paired_seq_num)/$trimmed_num*100);
       printf $fh ("  Unpaired total bases:\t\%d (%.2f %%)\n", $total_trimmed_seq_len - $total_paired_bases , ($total_trimmed_seq_len - $total_paired_bases)/$total_trimmed_seq_len*100);
     }
-    
+
     printf $fh ("\nDiscarded reads #:\t\%d (%.2f %%)\n", $total_num - $trimmed_num , ($total_num - $trimmed_num)/$total_num*100);
     printf $fh ("Trimmed bases:\t\%d (%.2f %%)\n", $total_raw_seq_len - $total_trimmed_seq_len, ($total_raw_seq_len - $total_trimmed_seq_len)/$total_raw_seq_len*100);
-*/    
-    
+*/
+
 }
 /******************************************************************************/
 //void splitFilter(in string oligo, in ushort[] quals, std.stdio.File OUT) {
@@ -591,9 +591,9 @@ void splitFilter(in string oligo, in ushort[] quals) {
             while((quals[i] >= minQ) && (i < oligo.length)) {
                 i++;
             }
-           
+
             stopPos = i;
-            
+
             // Is fragment of sufficient length to attempt to split on N's?
             if((stopPos-startPos) >= minL) {
                 // Split on N's: Save those that are of sufficent length
@@ -609,9 +609,9 @@ void splitFilter(in string oligo, in ushort[] quals) {
 */
 /******************************************************************************/
 void parseFASTQ(in ulong idx, in ulong offsetStart, ref inputOptions inOpts, in ulong stagger, std.stdio.File OUT) { //in string infilename, in ulong fileSize) {
-    
+
     std.stdio.File FASTQ = std.stdio.File(inOpts.inFastq, "r");
-    
+
     // Determine offset of last byte to read in
     ulong chunkEnd = (idx == inOpts.partitionOffsets.length-1)
                    ? (inOpts.inFastqFileSize)
@@ -634,7 +634,7 @@ void parseFASTQ(in ulong idx, in ulong offsetStart, ref inputOptions inOpts, in 
     ulong           localRawSeqCounter   = 0;
     string          trimmedFqStack;
 
-    // Staggering the flushing of trimmed reads to disk so as to prevent direct 
+    // Staggering the flushing of trimmed reads to disk so as to prevent direct
     // competition between threads for the single filehandle.
     do {
         h1 = FASTQ.readln().chomp();
@@ -643,31 +643,31 @@ void parseFASTQ(in ulong idx, in ulong offsetStart, ref inputOptions inOpts, in 
         localTotalRawSeqLen += s.length;
         h2 = FASTQ.readln();
         q  = FASTQ.readln().chomp();
-        
+
         if(s.length < inOpts.baseLength) continue;
-        
+
         trimEntry(inOpts, h1, s, h2, q, localTrimSeqNum, localTotalTrimSeqLen, localTrimSeqLenHash, localTrashedBases, trimmedFqStack);              // <-------------------- HERE!
 
-    } while ((localRawSeqNum < stagger) && (FASTQ.tell() < chunkEnd));    
-    
+    } while ((localRawSeqNum < stagger) && (FASTQ.tell() < chunkEnd));
+
     writeln("Staggering at ",stagger," reads; processed ",localRawSeqNum," reads");
     flushEntries(localRawSeqCounter, trimmedFqStack, OUT);
 
 
-    /*  
+    /*
         FIX: A single emtpy line will hoze this entire program. Implement an
              additional FOR or WHILE loop to screen 4 valid, non-empty lines.
     */
 
     while (FASTQ.tell() < chunkEnd) {
     //do {
-    
+
         /////////////////////////////////
         // FASTQ entry every 4 lines
         /////////////////////////////////
         h1 = FASTQ.readln().chomp();                    // 1of4: seq header
         //writeln("HEADER:      \"", h1,"\"");
-    
+
         s = FASTQ.readln().chomp();                     // 2of4: sequence
         ++localRawSeqNum;
         localTotalRawSeqLen += s.length;                // total length of all input sequences
@@ -696,7 +696,7 @@ void parseFASTQ(in ulong idx, in ulong offsetStart, ref inputOptions inOpts, in 
 
     writeln("IDX(",idx,") counted ",localRawSeqNum," reads");
 
-    synchronized {            
+    synchronized {
         inOpts.rawSeqNum       += localRawSeqNum;                           // declare
         inOpts.totalRawSeqLen  += localTotalRawSeqLen;                      // declare
         inOpts.trimSeqNum      += localTrimSeqNum;                          // declare
@@ -727,10 +727,10 @@ void flushEntries(ref ulong localRawSeqCounter, ref string trimmedFqStack, std.s
     }
 }
 /******************************************************************************/
-void trimEntry(inputOptions inOpts, 
-               in string h1,                        in string s, 
-               in string h2,                        in string q, 
-               ref ulong trimSeqNum,                ref ulong totalTrimSeqLen, 
+void trimEntry(inputOptions inOpts,
+               in string h1,                        in string s,
+               in string h2,                        in string q,
+               ref ulong trimSeqNum,                ref ulong totalTrimSeqLen,
                ref ulong[ushort] trimSeqLenHash,    ref ulong trashedBases,
                ref string trimmedFqStack) {
 
@@ -744,19 +744,17 @@ void trimEntry(inputOptions inOpts,
     //string trimmedEntry;
 
     ulong fragCounter = 0;
-
+    // writeln(s.length, ' ', q.length);
     while (i < s.length) {
-
-        // Decode quality and check its validity        
-        if((cast(ushort)q[i] - inOpts.asciiEncoding) >= inOpts.userMinQ) {
+        // Decode quality and check its validity
+        if((i < s.length  - 1) && (cast(ushort)q[i] - inOpts.asciiEncoding) >= inOpts.userMinQ) {
 
             qualStart = i++;
 
             // LOOP: Decode quality and check its validity
-            while(((cast(int)q[i] - inOpts.asciiEncoding) >= inOpts.userMinQ) && (i < s.length)) {
-                i++;
+            while((cast(int)q[i] - inOpts.asciiEncoding) >= inOpts.userMinQ && (i < s.length - 1) && i++) {
             }
-           
+
             qualStop = i;
 
             // Is fragment of sufficient length to attempt to split on N's?
@@ -779,9 +777,9 @@ void trimEntry(inputOptions inOpts,
 
                         //writeln("---------> OUTSIDE LOOP1");
 
-                        // Ensure ATGC-stretch is of sufficient length            
+                        // Ensure ATGC-stretch is of sufficient length
                         if(fragLen >= inOpts.baseLength) {
-                            
+
                             //writeln("---------> INSIDE LOOP1");
 
                             ////////////////////////////
@@ -802,11 +800,11 @@ void trimEntry(inputOptions inOpts,
 
                             // OPT: Fix-trim read
                             if(inOpts.userFixL) {
-    
+
                                 //writeln("---------> INSIDE fixL LOOP");
 
                                 debug writeln("FRAG: ", s[nStart..nStop]);
-    
+
                                 float div = cast(float) fragLen / inOpts.userFixL;  // No. of cycles (real)
                                 ushort rounds = cast(ushort) div;       // No. of cycles (int)
 
@@ -845,7 +843,7 @@ void trimEntry(inputOptions inOpts,
                                         trimmedFqStack ~= "\n";
                                         //writeln();
                                     }
-                                    
+
                                     ++fragCounter;
                                     //writeln("....... AFTER1: ",fragCounter, ".......");
 
@@ -860,9 +858,9 @@ void trimEntry(inputOptions inOpts,
 
 
                                 //writeln("---------> OUTSIDE recycle LOOP");
-    
+
                                 ///////////////////////////////////////////////////
-                                // OPTIONAL: Process last frag containing overhang                                        
+                                // OPTIONAL: Process last frag containing overhang
                                 ///////////////////////////////////////////////////
                                 ushort overhang = cast(ushort) ((div - cast(float)rounds) * cast(float)inOpts.userFixL);
                                 if(inOpts.recycle) {
@@ -945,7 +943,7 @@ void trimEntry(inputOptions inOpts,
                                 totalTrimSeqLen += (fragLen);
                                 trimSeqLenHash[cast(ushort)(fragLen)]++;
                             }
-                            
+
                         } // if(fragLen >= inOpts.baseLength)
                     }
                     n++;
@@ -970,7 +968,7 @@ ulong getFastqEntryOffset (std.stdio.File FASTQ, in ulong offset) {
     bool entry_found       = false;
     bool validated_entry   = false;
     ulong validated_offset = 0;
-    
+
     // Max no. of lines to read equals 7.
     // LINE1: fragment of FASTQ header  <--- absence of ^@ means invalid start site
     // LINE2: ^(ATGC)+$                 <--- absence of ^@ means invalid start site
@@ -979,11 +977,11 @@ ulong getFastqEntryOffset (std.stdio.File FASTQ, in ulong offset) {
     // LINE5: ^@(\S+)$                  <--- entry_found = 1, entry_offset = FASTQ.tell()
     // LINE6: ^(ATGC)+$                 <--- absence of ^@ means invalid start site
     // LINE7: ^+(.*)$                   <--- validates entry start site above
-    
-    // If there happens to be two ^@ in a row, then the only valid situation 
+
+    // If there happens to be two ^@ in a row, then the only valid situation
     // this could happen in is if the first ^@ belongs to the quality encoding line.
     // That means the second ^@ may be the official start.
-    // 
+    //
     // LINE1: fragment of FASTQ header  <--- absence of ^@ means invalid start site
     // LINE2: ^(ATGC)+$                 <--- absence of ^@ means invalid start site
     // LINE3: ^+(.*)$                   <--- absence of ^@ means invalid start site
@@ -1006,7 +1004,7 @@ ulong getFastqEntryOffset (std.stdio.File FASTQ, in ulong offset) {
             debug writeln("----> entry found at offset ",entry_offset);
             continue OUTER;
         }
-        
+
         if(entry_found && buf[0] == '+') {
             validated_entry = true;
             validated_offset = entry_offset;
@@ -1036,7 +1034,7 @@ void profileFastqFileOffsetVitals (std.stdio.File FASTQ, ref inputOptions inOpts
     // Estimate size of a single entry (4 lines) from the first entry
     char[] buf;
     ulong bufLen;
-    
+
     inOpts.inFastqFileSize = getSize(inOpts.inFastq);
 
     foreach(i; 0..4) {
@@ -1061,7 +1059,7 @@ void profileFastqFileOffsetVitals (std.stdio.File FASTQ, ref inputOptions inOpts
         writeln("# Entries/thread = ", inOpts.fastqEntriesPerThread," (approximate)");
     }
 
-    // Given the average position of each potential FASTQ entry offset as a 
+    // Given the average position of each potential FASTQ entry offset as a
     // starting point, we extract the exact position of the nearest FASTQ entry
     // and specify its end offset as well.
     foreach (t; 0..inOpts.threads) {
@@ -1074,7 +1072,7 @@ void profileFastqFileOffsetVitals (std.stdio.File FASTQ, ref inputOptions inOpts
               = start + entriesPerThread*bufLen - 1
         */
         ulong seekStart = (inOpts.fastqEntriesPerThread)*(t)*(inOpts.fastqEntrySize);
-        ulong seekEnd   = (t == inOpts.threads-1) 
+        ulong seekEnd   = (t == inOpts.threads-1)
                         ? (inOpts.inFastqFileSize)
                         : seekStart + (inOpts.fastqEntriesPerThread)*(inOpts.fastqEntrySize) - 1;
 
@@ -1085,21 +1083,21 @@ void profileFastqFileOffsetVitals (std.stdio.File FASTQ, ref inputOptions inOpts
 
         inOpts.partitionOffsets ~= nextOffset;     // Add next valid offset
         ++inOpts.effThreadCount;
-        
+
         debug {
             writeln("----> chunk begins at byte offset ", nextOffset);
             writeln();
         }
-        
+
     }
 
-    // Output effective thread count (since FASTQ file might not be partitionable 
+    // Output effective thread count (since FASTQ file might not be partitionable
     // into the provided number of threads
     writeln("Threads: ",inOpts.effThreadCount," (effective)\t",inOpts.threads," (requested)");
 
     // Last entry will never be the total file size, since that means no entries
     // could follow.
-    debug { 
+    debug {
         foreach(b, ulong borderStart; inOpts.partitionOffsets) {
             ulong chunkEnd = (b == inOpts.partitionOffsets.length-1)
                            ? (inOpts.inFastqFileSize)
@@ -1132,7 +1130,7 @@ ulong determineFlushLimit(in uint effThreadCount) {
 /******************************************************************************/
 /******************************************************************************/
 void main(string[] args) {
-    
+
     StopWatch swProgram;
     swProgram.start();
 
@@ -1166,7 +1164,7 @@ void main(string[] args) {
     string             progName         = "splitrim";
     string             progVersion      = "0.1j3e6";
     bool               showVersion      = false;
-    
+
 
     getopt(
         args, std.getopt.config.caseSensitive,
@@ -1193,7 +1191,7 @@ void main(string[] args) {
     );
 
     ////////////////////////////////////////////
-    // Retain all user input parameters 
+    // Retain all user input parameters
     ////////////////////////////////////////////
     inOpts.progName      = progName; //args[0];
     inOpts.progVersion   = progVersion;
@@ -1201,7 +1199,7 @@ void main(string[] args) {
     inOpts.asciiEncoding = asciiEncoding;
     inOpts.outPath       = outPath;         // o_path
     inOpts.userMinL      = userMinL;        // opt_min_L
-    inOpts.userFixL      = userFixL;        // 
+    inOpts.userFixL      = userFixL;        //
     inOpts.recycle       = recycle;         //
     inOpts.threads       = threads;         //
     inOpts.trashedBases  = trashedBases;    // No. of bases trashed from using --fixL without --recycle
@@ -1221,11 +1219,11 @@ void main(string[] args) {
     if(showUsage || showHelp || (outPath.length == 0) || (inFastq.length == 0)) usage();
     inOpts.inFastq         = inFastq;         // $_[1]
     inOpts.statsFilename   = statsFilename;
-    
-    inOpts.baseLength = (inOpts.userMinL > 0 )  ? inOpts.userMinL 
+
+    inOpts.baseLength = (inOpts.userMinL > 0 )  ? inOpts.userMinL
                       : (inOpts.userFixL > 0 )  ? inOpts.userFixL
                       : (0);
-                      
+
     ////////////////////////////////////////////
     // Enforce some basic input requirements
     ////////////////////////////////////////////
@@ -1248,7 +1246,7 @@ void main(string[] args) {
     inOpts.outHistoFilename = (histoFilename.length == 0)
                             ? buildPath(inOpts.outPath, inOpts.inFastqBasename~"_splitrim.histo.txt")
                             : buildPath(inOpts.outPath, histoFilename);
-                            
+
     // ===========================
     // FASTRIM EDITED (2012-11-09):
     // ===========================
@@ -1294,7 +1292,7 @@ void main(string[] args) {
     auto workers = new TaskPool;
     foreach(i, ref offsetStart; workers.parallel(inOpts.partitionOffsets)) {
         parseFASTQ(i, offsetStart, inOpts, staggeredFlushCount[i], OUT); //inOpts.inFastq, inOpts.inFastqFileSize);
-    }    
+    }
     workers.finish();
     swTrim.stop();
     writeln("GLOBAL READ COUNT = ", inOpts.rawSeqNum);
@@ -1304,7 +1302,7 @@ void main(string[] args) {
     // Calc read statistics
     /////////////////////////////////
     seqLenStats myStats;
-    
+
     // EDIT: NEED TO UPDATE FOR trimSeqLenHash COMPATABILITY
     bool validSeqs = calcStats(myStats, inOpts.trimSeqLenHash);    // returns true if calc is OK
     if(!validSeqs) {
@@ -1326,7 +1324,7 @@ void main(string[] args) {
     writeHistoFile(HISTO, inOpts);
 
     swProgram.stop();
-    
+
     return;
 }
 /***************************************************************************************/
@@ -1337,7 +1335,7 @@ void usage() {
     writeln;
     writeln("Usage: ", inOpts.progName, " [INPUT] [OUTPUT] [OTHERS]");
     write(
-        "\n",       
+        "\n",
         "Input:\n",
         "==============\n",
         "REQUIRED:\n",
@@ -1387,7 +1385,7 @@ void usage() {
     );
     writeln;
     exit(0);
-    
+
 }
 /******************************************************************************/
 
@@ -1397,7 +1395,7 @@ void usage() {
     // Case 4: Catch contiguous 3'-low-quality bases
     // Case 5: Catch both 5'- and 3'-low quality bases
     // Case 6: Catch one string of contiguous low-quality bases in the middle
-    // Case 7: Catch multiple strings of contiguous low-quality bases in the middle 
+    // Case 7: Catch multiple strings of contiguous low-quality bases in the middle
     // ----------------------------------------------------------------------------
     // Case 8: Catch a single, high quality, 5' N
     // Case 9: Catch contiguous, high quality, 5' N's
@@ -1409,8 +1407,8 @@ void usage() {
     // Case 14: Catch contiguous, low-quality bases at the ends (5' and 3'), along
     //          with contiguous, high-quality strings of N's in the middle
     // Case 15: Catch contiguous, high-quality N's at the ends (5' and 3'), along
-    //          with contiguous, low-quality bases in the middle. 
-    
+    //          with contiguous, low-quality bases in the middle.
+
 /*
 
 GLOBAL READ COUNT = 8966559
@@ -1423,20 +1421,17 @@ PROGRAM ELAPSED TIME: 173512 ms
         2  1000000      255656                  8966559     16              4
 
         2    25000      170471                  8966559     16              4   (used && with readCounter)
-        4    25000      182330                  8966559     16              4   (used && with readCounter)        
-        
+        4    25000      182330                  8966559     16              4   (used && with readCounter)
+
         1   100000      162215                  8966559     16              4   (used && with readCounter)
         2   100000      173448
         4   100000      193537
         8   100000      290494
-        
+
         4   100000      204606                                                  (Lock-Free; hitting same file)
         4   100000      206233      187                                         (L-F)
         4   100000      199519      181                                         (L-F; FASTQ.ftell())
-        
+
         **larger thread count with lower flush values may increase thread wait times!
 
 */
-
-
-
