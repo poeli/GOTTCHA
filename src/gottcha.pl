@@ -161,8 +161,25 @@ print "[$ct] Number of threads: $THREADS\n";
 
 #open (STDOUT, "| tee -a $LOGFILE");
 $ct = &timeInterval($time);
-`mkdir -p $OUTDIR/$TMPDIR`;
-&executeCommand("rm $LOGFILE | touch $LOGFILE", "ERROR: Failed to create logfile: $LOGFILE."); 
+#`mkdir -p $OUTDIR/$TMPDIR`;
+#&executeCommand("rm $LOGFILE | touch $LOGFILE", "ERROR: Failed to create logfile: $LOGFILE."); 
+if ( -e "$OUTDIR/$TMPDIR" ){
+	print STDERR "$OUTDIR/$TMPDIR exists\n";
+}
+else{
+	mkdir("$OUTDIR/$TMPDIR") || die "could not create directory $OUTDIR/$TMPDIR".$!;
+}
+
+if( -e $LOGFILE){
+	print STDERR "$LOGFILE exists\n";
+}
+else{
+	open FILE, ">", "$LOGFILE" or die "Could not create logfile $LOGFILE: ".$!;
+	print FILE "LOG\n";
+	close FILE;
+}
+
+
 
 # check running environment
 $ct = &timeInterval($time);
@@ -180,7 +197,7 @@ my @st_stats_files;
 if( defined $opt{stDir} ){
     print "[$ct] Pre-splitrimmed directory is specified to $STDIR. Skip split-trimming step.\n";
 	foreach my $fastq ( @fastqs ){
-		my ($p) = $fastq =~ /^([^\/]+)\.\w+$/;
+		my ($p) = $fastq =~ /([^\/]+)\.\w+$/;
     	my $file = &checkFileAbsence("$STDIR/${p}_splitrim.fastq", "$STDIR/${p}_splitrim.stats.txt");
     	if( $file ){
         	die "[$ct] ERROR: Can't find $file in $STDIR directory.\n";
@@ -195,7 +212,7 @@ else{
 	print "[$ct] Split-trimming with parameters fixL=$TRIM_FIXL, minQ=$TRIM_MINQ, ascii=$TRIM_ASCII.\n";
 	foreach my $fastq ( @fastqs )
 	{
-		my ($p) = $fastq =~ /^([^\/]+)\.\w+$/;
+		my ($p) = $fastq =~ /([^\/]+)\.\w+$/;
 		print "[$ct] Split-trimming: $fastq...\n";
 		&executeCommand("splitrim                \\
 		                   --inFile=$fastq       \\
