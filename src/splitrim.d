@@ -107,7 +107,8 @@ import std.getopt;
 import std.path: buildPath, baseName, stripExtension;
 import std.algorithm;
 import std.math;
-import std.c.stdlib;
+//import std.c.stdlib;
+import core.stdc.stdlib;
 import std.exception;
 import std.datetime;
 import std.file;
@@ -734,9 +735,9 @@ void trimEntry(inputOptions inOpts,
                ref ulong[ushort] trimSeqLenHash,    ref ulong trashedBases,
                ref string trimmedFqStack) {
 
-    ushort i = 0;
-    ushort qualStart = 0;
-    ushort qualStop  = 0;
+    ulong i = 0;
+    ulong qualStart = 0;
+    ulong qualStop  = 0;
     bool   changingEncoding = (inOpts.asciiEncoding == inOpts.outEncoding)
                             ? false
                             : true;
@@ -763,9 +764,9 @@ void trimEntry(inputOptions inOpts,
             if(qualStop - qualStart >= inOpts.baseLength) {
 
                 // Split on N's: Save those that are of sufficent length
-                ushort n      = qualStart;
-                ushort nStart = qualStart;
-                ushort nStop  = qualStop;
+                ulong n      = qualStart;
+                ulong nStart = qualStart;
+                ulong nStop  = qualStop;
 
                 while(n < qualStop) {
                     if(s[n] != 'N') {       // Entering valid stretch
@@ -775,7 +776,7 @@ void trimEntry(inputOptions inOpts,
                         }
                         nStop = n;
 
-                        ushort fragLen = cast(ushort) (nStop - nStart);
+                        ulong fragLen = cast(ulong) (nStop - nStart);
 
                         //writeln("---------> OUTSIDE LOOP1");
 
@@ -808,7 +809,7 @@ void trimEntry(inputOptions inOpts,
                                 debug writeln("FRAG: ", s[nStart..nStop]);
     
                                 float div = cast(float) fragLen / inOpts.userFixL;  // No. of cycles (real)
-                                ushort rounds = cast(ushort) div;       // No. of cycles (int)
+                                ulong rounds = cast(ulong) div;       // No. of cycles (int)
 
                                 //writeln("    floatRounds = ",div,"\t","ushortRounds = ",rounds);
 
@@ -824,8 +825,8 @@ void trimEntry(inputOptions inOpts,
                                 //writeln("---------> OUTSIDE rounds LOOP");
 
                                 foreach(j; 0..rounds) {
-                                    ushort jStart = cast(ushort) (cast(int)nStart + (j * cast(int)inOpts.userFixL));
-                                    ushort jStop  = cast(ushort) (jStart + inOpts.userFixL); // = nStart+((j+1)*inOpts.userFixL);
+                                    ulong jStart = cast(ulong) (cast(int)nStart + (j * cast(int)inOpts.userFixL));
+                                    ulong jStop  = cast(ulong) (jStart + inOpts.userFixL); // = nStart+((j+1)*inOpts.userFixL);
 
                                     //writeln("---------> INSIDE rounds LOOP");
 
@@ -871,7 +872,7 @@ void trimEntry(inputOptions inOpts,
 
 
                                     // Note the difference in range variable names: from jStart to nStop (*NOT* jStart to jStop)
-                                    ushort jStart = cast(ushort)(nStart+(rounds*inOpts.userFixL));
+                                    ulong jStart = cast(ulong)(nStart+(rounds*inOpts.userFixL));
 
                                     // We display "jStart+1" because sequences are 1-offset outside of D
                                     //writeln("....... BEFORE2: ",fragCounter, ".......");
@@ -1290,12 +1291,25 @@ void main(string[] args) {
 
     StopWatch swTrim;
     swTrim.start();
-    defaultPoolThreads(inOpts.effThreadCount);           // sets no. of threads avail
-    auto workers = new TaskPool;
-    foreach(i, ref offsetStart; workers.parallel(inOpts.partitionOffsets)) {
-        parseFASTQ(i, offsetStart, inOpts, staggeredFlushCount[i], OUT); //inOpts.inFastq, inOpts.inFastqFileSize);
-    }    
-    workers.finish();
+
+    // Disable mutlithreading for now! If the user specifies more than one thread (using -t), then 
+    // we will have a problem!
+    if(inOpts.effThreadCount != 1){
+
+	writeln("Multithreading has been disabled! Please run with a single thread!");
+	exit(0);
+    }
+
+    //defaultPoolThreads(inOpts.effThreadCount);           // sets no. of threads avail
+    //auto workers = new TaskPool;
+    //foreach(i, ref offsetStart; workers.parallel(inOpts.partitionOffsets)) {
+        //parseFASTQ(i, offsetStart, inOpts, staggeredFlushCount[i], OUT); //inOpts.inFastq, inOpts.inFastqFileSize);
+    //}    
+    //workers.finish();
+
+    // Parsing is now done with a single thread.
+    parseFASTQ(0, 0, inOpts, staggeredFlushCount[0], OUT);
+
     swTrim.stop();
     writeln("GLOBAL READ COUNT = ", inOpts.rawSeqNum);
     writeln("Trim Time: ",swTrim.peek().msecs, " ms");
@@ -1437,6 +1451,7 @@ PROGRAM ELAPSED TIME: 173512 ms
         **larger thread count with lower flush values may increase thread wait times!
 
 */
+
 
 
 
